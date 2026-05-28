@@ -71,8 +71,12 @@ def get_statuses():
 async def add_log(request: Request):
     require_admin(request)
     data = await request.json()
-    if not data.get("call"):
-        raise HTTPException(status_code=400, detail="呼号不能为空")
+    required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+    for field in required_fields:
+        if not data.get(field):
+            raise HTTPException(status_code=400, detail=f"{field} 不能为空")
+    if not data.get("band"):
+        raise HTTPException(status_code=400, detail="波段和频率至少填写一项")
     log_id = insert_log(data)
     return {"ok": True, "id": log_id}
 

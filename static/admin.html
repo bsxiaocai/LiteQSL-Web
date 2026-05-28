@@ -40,13 +40,16 @@
                     <button id="logoutBtn" class="text-blue-200 hover:text-white text-sm">退出登录</button>
                 </div>
             </div>
+            <div class="max-w-7xl mx-auto px-4 mt-2">
+                <div class="text-blue-300 text-sm font-mono" id="clocks"></div>
+            </div>
         </header>
 
         <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
             <!-- Manual Entry -->
             <section class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">手动录入 QSO</h2>
-                <form id="addForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <form id="addForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">呼号 *</label>
                         <input type="text" name="call" required placeholder="BH7GUL"
@@ -64,7 +67,7 @@
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">波段</label>
-                        <select name="band"
+                        <select id="bandSelect" name="band"
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <option value="">--</option>
                             <option>160m</option><option>80m</option><option>60m</option>
@@ -73,6 +76,11 @@
                             <option>10m</option><option>6m</option><option>2m</option>
                             <option>70cm</option><option>23cm</option>
                         </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-600 mb-1">频率 (MHz)</label>
+                        <input type="text" id="freqInput" placeholder="如 14.1"
+                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">模式</label>
@@ -149,6 +157,7 @@
                                 <th class="px-3 py-2">日期</th>
                                 <th class="px-3 py-2">时间</th>
                                 <th class="px-3 py-2">波段</th>
+                                <th class="px-3 py-2">频率</th>
                                 <th class="px-3 py-2">模式</th>
                                 <th class="px-3 py-2">RST</th>
                                 <th class="px-3 py-2">卡片状态</th>
@@ -161,6 +170,12 @@
                 <div id="noLogs" class="text-center text-gray-500 py-8 hidden">暂无记录</div>
             </section>
         </main>
+
+        <footer class="text-center text-gray-500 py-6 text-sm">
+            <a href="https://github.com/bsxiaocai/LiteQSL-Web" target="_blank" class="hover:text-blue-600">LiteQSL-Web</a>
+            &copy; 2026 | Powered by FastAPI + SQLite |
+            <a href="https://blog.bh7gul.top" target="_blank" class="hover:text-blue-600">访问主站</a>
+        </footer>
     </div>
 
     <!-- Change Password Modal -->
@@ -198,6 +213,45 @@
 
     <script>
         const STATUS_OPTIONS = ['无法考证', '未发送', '已发送', '无需发送', '电子确认'];
+        const BAND_FREQ = {
+            '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
+            '40m': '7.000-7.300', '30m': '10.100-10.150', '20m': '14.000-14.350',
+            '17m': '18.068-18.168', '15m': '21.000-21.450', '12m': '24.890-24.990',
+            '10m': '28.000-29.700', '6m': '50.000-54.000', '2m': '144.000-148.000',
+            '70cm': '430.000-440.000', '23cm': '1240.000-1300.000'
+        };
+        function bandFreq(band) { return band ? (BAND_FREQ[band] || band) + ' MHz' : '-'; }
+
+        function freqToBand(freq) {
+            const f = parseFloat(freq);
+            if (isNaN(f)) return '';
+            if (f >= 1.8 && f < 2.0) return '160m';
+            if (f >= 3.5 && f < 4.0) return '80m';
+            if (f >= 5.3 && f < 5.4) return '60m';
+            if (f >= 7.0 && f < 7.3) return '40m';
+            if (f >= 10.1 && f < 10.15) return '30m';
+            if (f >= 14.0 && f < 14.35) return '20m';
+            if (f >= 18.068 && f < 18.168) return '17m';
+            if (f >= 21.0 && f < 21.45) return '15m';
+            if (f >= 24.89 && f < 25.0) return '12m';
+            if (f >= 28.0 && f < 29.7) return '10m';
+            if (f >= 50.0 && f < 54.0) return '6m';
+            if (f >= 144.0 && f < 148.0) return '2m';
+            if (f >= 430.0 && f < 440.0) return '70cm';
+            if (f >= 1240.0 && f < 1300.0) return '23cm';
+            return '';
+        }
+
+        // Frequency <-> Band sync
+        document.getElementById('freqInput').addEventListener('input', function() {
+            const band = freqToBand(this.value);
+            if (band) document.getElementById('bandSelect').value = band;
+        });
+        document.getElementById('bandSelect').addEventListener('change', function() {
+            if (this.value && BAND_FREQ[this.value]) {
+                document.getElementById('freqInput').value = BAND_FREQ[this.value].split('-')[0];
+            }
+        });
 
         // Check login status on load
         fetch('/api/admin/check').then(r => r.json()).then(data => {
@@ -311,6 +365,7 @@
                         <td class="px-3 py-2">${log.qso_date || '-'}</td>
                         <td class="px-3 py-2">${log.time_on || '-'}</td>
                         <td class="px-3 py-2">${log.band || '-'}</td>
+                        <td class="px-3 py-2 text-gray-600">${bandFreq(log.band)}</td>
                         <td class="px-3 py-2">${log.mode || '-'}</td>
                         <td class="px-3 py-2">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
                         <td class="px-3 py-2">
@@ -345,6 +400,26 @@
             const form = e.target;
             const data = {};
             new FormData(form).forEach((v, k) => { if (v) data[k] = v; });
+
+            // Frequency -> Band sync
+            const freq = document.getElementById('freqInput').value.trim();
+            if (freq) {
+                const band = freqToBand(freq);
+                if (band) data.band = band;
+            }
+
+            // Required field validation
+            const requiredFields = {call: '呼号', qso_date: '日期', time_on: '时间', mode: '模式', rst_sent: 'RST发送', rst_rcvd: 'RST接收', qsl_status: '卡片状态'};
+            const missing = [];
+            for (const [k, label] of Object.entries(requiredFields)) {
+                if (!data[k]) missing.push(label);
+            }
+            if (!data.band) missing.push('波段或频率');
+            if (missing.length) {
+                alert('请填写必填字段：' + missing.join('、'));
+                return;
+            }
+
             fetch('/api/admin/logs', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -383,6 +458,20 @@
         document.getElementById('exportBtn').addEventListener('click', function() {
             window.location.href = '/api/admin/export-adif';
         });
+
+        // Clock
+        function updateClocks() {
+            const now = new Date();
+            const fmt = (tz) => {
+                const d = new Date(now.toLocaleString('en-US', {timeZone: tz}));
+                return [d.getHours(), d.getMinutes(), d.getSeconds()]
+                    .map(n => String(n).padStart(2, '0')).join(':');
+            };
+            document.getElementById('clocks').textContent =
+                `北京时间 ${fmt('Asia/Shanghai')}  |  UTC ${fmt('UTC')}`;
+        }
+        updateClocks();
+        setInterval(updateClocks, 1000);
     </script>
 </body>
 </html>
