@@ -51,6 +51,32 @@
         <!-- Recent Logs Section -->
         <section class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-semibold text-gray-800 mb-4">最近通联记录</h2>
+            <!-- 筛选控件 -->
+            <div class="flex flex-wrap gap-3 mb-4 items-end">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">波段</label>
+                    <select id="filterBand" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="">全部</option>
+                        <option>160m</option><option>80m</option><option>60m</option>
+                        <option>40m</option><option>30m</option><option>20m</option>
+                        <option>17m</option><option>15m</option><option>12m</option>
+                        <option>10m</option><option>6m</option><option>2m</option>
+                        <option>70cm</option><option>23cm</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">模式</label>
+                    <select id="filterMode" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="">全部</option>
+                        <option>SSB</option><option>CW</option><option>FT8</option>
+                        <option>FT4</option><option>FM</option><option>AM</option>
+                        <option>PSK31</option><option>RTTY</option><option>JS8</option>
+                        <option>SSTV</option><option>DIGITAL</option>
+                    </select>
+                </div>
+                <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm">筛选</button>
+                <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm">清除</button>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left">
                     <thead class="bg-gray-50 text-gray-600">
@@ -115,13 +141,35 @@
         }
 
         // Load recent logs
-        fetch('/api/recent').then(r => r.json()).then(data => {
-            const tbody = document.getElementById('recentTableBody');
-            if (data.logs.length === 0) {
-                document.getElementById('noRecentData').classList.remove('hidden');
-                return;
-            }
-            tbody.innerHTML = data.logs.map(rowHtml).join('');
+        function loadRecent(band, mode) {
+            const params = new URLSearchParams();
+            if (band) params.set('band', band);
+            if (mode) params.set('mode', mode);
+            const url = params.toString() ? `/api/recent?${params}` : '/api/recent';
+            fetch(url).then(r => r.json()).then(data => {
+                const tbody = document.getElementById('recentTableBody');
+                const noData = document.getElementById('noRecentData');
+                if (data.logs.length === 0) {
+                    noData.classList.remove('hidden');
+                    tbody.innerHTML = '';
+                    return;
+                }
+                noData.classList.add('hidden');
+                tbody.innerHTML = data.logs.map(rowHtml).join('');
+            });
+        }
+        loadRecent();
+
+        // 筛选控件事件
+        document.getElementById('filterApply').addEventListener('click', function() {
+            const band = document.getElementById('filterBand').value;
+            const mode = document.getElementById('filterMode').value;
+            loadRecent(band, mode);
+        });
+        document.getElementById('filterClear').addEventListener('click', function() {
+            document.getElementById('filterBand').value = '';
+            document.getElementById('filterMode').value = '';
+            loadRecent();
         });
 
         // Search

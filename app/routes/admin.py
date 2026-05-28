@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Request, HTTPException
+from datetime import datetime
+from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import Response
 from app.auth import check_admin, require_admin, verify_password, hash_password, validate_password_strength
 from app.database import (
@@ -7,9 +8,13 @@ from app.database import (
     update_qsl_status,
     delete_log,
     get_all_logs,
+    get_logs_paginated,
     insert_logs_batch,
     get_user,
     update_password,
+    check_duplicate,
+    check_duplicates_batch,
+    export_csv,
     QSL_STATUSES,
 )
 from app.adif_parser import parse_adif, export_adif
@@ -77,6 +82,14 @@ async def add_log(request: Request):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
     if not data.get("band"):
         raise HTTPException(status_code=400, detail="波段和频率至少填写一项")
+    # 重复检测（force=true 时跳过）
+    if not data.get("force"):
+        existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data["mode"])
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data['mode']} 的记录 (ID: {existing['id']})",
+            )
     log_id = insert_log(data)
     return {"ok": True, "id": log_id}
 
@@ -111,9 +124,26 @@ async def remove_log(log_id: int, request: Request):
 
 
 @router.get("/logs")
-def list_all_logs(request: Request):
+def list_all_logs(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    call: str = Query(None),
+    band: str = Query(None),
+    mode: str = Query(None),
+    qsl_status: str = Query(None),
+):
     require_admin(request)
-    return {"logs": get_all_logs()}
+    filters = {}
+    if call:
+        filters["call"] = call
+    if band:
+        filters["band"] = band
+    if mode:
+        filters["mode"] = mode
+    if qsl_status:
+        filters["qsl_status"] = qsl_status
+    return get_logs_paginated(filters, page, page_size)
 
 
 @router.post("/import-adif")
@@ -121,6 +151,7 @@ async def import_adif(request: Request):
     require_admin(request)
     form = await request.form()
     file = form.get("file")
+    force = form.get("force", "false").lower() == "true"
     if not file:
         raise HTTPException(status_code=400, detail="请上传文件")
     content = await file.read()
@@ -128,6 +159,16 @@ async def import_adif(request: Request):
     records = parse_adif(text)
     if not records:
         raise HTTPException(status_code=400, detail="未解析到有效记录")
+    # 重复检测
+    if not force:
+        duplicates = check_duplicates_batch(records)
+        if duplicates:
+            return {
+                "ok": False,
+                "duplicates": [{"record": d["record"], "existing_id": d["existing"]["id"]} for d in duplicates],
+                "duplicate_count": len(duplicates),
+                "total": len(records),
+            }
     count = insert_logs_batch(records)
     return {"ok": True, "count": count}
 
@@ -141,4 +182,32 @@ def export_adif_file(request: Request):
         content=content,
         media_type="text/plain",
         headers={"Content-Disposition": "attachment; filename=export.adi"},
+    )
+
+
+@router.get("/export-csv")
+def export_csv_file(
+    request: Request,
+    band: str = Query(None),
+    mode: str = Query(None),
+    qsl_status: str = Query(None),
+):
+    require_admin(request)
+    filters = {}
+    if band:
+        filters["band"] = band
+    if mode:
+        filters["mode"] = mode
+    if qsl_status:
+        filters["qsl_status"] = qsl_status
+    if filters:
+        records = get_logs_paginated(filters, page=1, page_size=99999)["logs"]
+    else:
+        records = get_all_logs()
+    content = export_csv(records)
+    filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.csv"
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

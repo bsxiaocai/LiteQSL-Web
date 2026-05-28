@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import csv
+import io
 from config import DATABASE_PATH
 
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
@@ -37,6 +39,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # 添加索引优化查询性能
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_call ON logs(call)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_date ON logs(qso_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
     conn.commit()
     conn.close()
     seed_admin_user()
@@ -192,3 +200,96 @@ def delete_log(log_id: int) -> bool:
     deleted = cur.rowcount > 0
     conn.close()
     return deleted
+
+
+def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
+    """分页查询通联记录，支持按呼号、波段、模式、卡片状态筛选"""
+    conditions = ["1=1"]
+    params = []
+    if filters.get("call"):
+        conditions.append("call LIKE ?")
+        params.append(f"%{filters['call']}%")
+    if filters.get("band"):
+        conditions.append("band = ?")
+        params.append(filters["band"])
+    if filters.get("mode"):
+        conditions.append("mode = ?")
+        params.append(filters["mode"])
+    if filters.get("qsl_status"):
+        conditions.append("qsl_status = ?")
+        params.append(filters["qsl_status"])
+    where = " AND ".join(conditions)
+
+    conn = get_conn()
+    total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+    offset = (page - 1) * page_size
+    rows = conn.execute(
+        f"SELECT * FROM logs WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        params + [page_size, offset],
+    ).fetchall()
+    conn.close()
+    return {
+        "logs": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def check_duplicate(call: str, qso_date: str, time_on: str, band: str, mode: str) -> dict | None:
+    """检测是否存在重复通联记录（联合五字段判定）"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND time_on = ? AND band = ? AND mode = ? LIMIT 1",
+        (call, qso_date, time_on, band, mode),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def check_duplicates_batch(records: list[dict]) -> list[dict]:
+    """批量检测重复记录，返回重复记录列表"""
+    duplicates = []
+    for rec in records:
+        existing = check_duplicate(
+            rec.get("call", ""),
+            rec.get("qso_date", ""),
+            rec.get("time_on", ""),
+            rec.get("band", ""),
+            rec.get("mode", ""),
+        )
+        if existing:
+            duplicates.append({"record": rec, "existing": existing})
+    return duplicates
+
+
+# 波段到频率的映射（取波段下限作为代表频率）
+BAND_FREQ_MAP = {
+    "160m": "1.800", "80m": "3.500", "60m": "5.300",
+    "40m": "7.000", "30m": "10.100", "20m": "14.000",
+    "17m": "18.068", "15m": "21.000", "12m": "24.890",
+    "10m": "28.000", "6m": "50.000", "2m": "144.000",
+    "70cm": "430.000", "23cm": "1240.000",
+}
+
+
+def export_csv(records: list[dict]) -> str:
+    """将通联记录导出为 CSV 格式字符串（含 UTF-8 BOM）"""
+    output = io.StringIO()
+    output.write("﻿")  # UTF-8 BOM
+    writer = csv.writer(output)
+    writer.writerow(["CALL", "DATE", "TIME", "BAND", "FREQ", "MODE", "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT"])
+    for rec in records:
+        writer.writerow([
+            rec.get("call", ""),
+            rec.get("qso_date", ""),
+            rec.get("time_on", ""),
+            rec.get("band", ""),
+            BAND_FREQ_MAP.get(rec.get("band", ""), ""),
+            rec.get("mode", ""),
+            rec.get("rst_sent", ""),
+            rec.get("rst_rcvd", ""),
+            rec.get("qsl_status", ""),
+            rec.get("comment", ""),
+        ])
+    return output.getvalue()
