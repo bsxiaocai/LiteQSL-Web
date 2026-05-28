@@ -7,6 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 max-w-sm"></div>
+
     <!-- Login Page -->
     <div id="loginPage" class="flex items-center justify-center min-h-screen">
         <div class="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
@@ -23,7 +26,7 @@
                         class="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
                 <button type="submit"
-                    class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">登录</button>
+                    class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition min-h-[44px]">登录</button>
                 <p id="loginError" class="text-red-500 text-sm mt-2 hidden"></p>
             </form>
         </div>
@@ -32,9 +35,9 @@
     <!-- Admin Dashboard -->
     <div id="adminPage" class="hidden">
         <header class="bg-blue-900 text-white py-4 shadow-lg">
-            <div class="max-w-7xl mx-auto px-4 flex justify-between items-center">
+            <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <h1 class="text-xl font-bold">LiteQSL-Web 管理后台</h1>
-                <div class="flex items-center gap-4">
+                <div class="flex flex-wrap items-center gap-4">
                     <a href="/" class="text-blue-200 hover:text-white text-sm">返回首页</a>
                     <button id="changePwdBtn" class="text-blue-200 hover:text-white text-sm">修改密码</button>
                     <button id="logoutBtn" class="text-blue-200 hover:text-white text-sm">退出登录</button>
@@ -119,7 +122,7 @@
                     </div>
                     <div class="flex items-end">
                         <button type="submit"
-                            class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition">添加记录</button>
+                            class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition min-h-[44px]">添加记录</button>
                     </div>
                 </form>
             </section>
@@ -135,7 +138,7 @@
                                 class="w-full border rounded-lg px-3 py-2 text-sm">
                         </div>
                         <button type="submit"
-                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition whitespace-nowrap">导入</button>
+                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition whitespace-nowrap min-h-[44px]">导入</button>
                     </form>
                     <button id="exportBtn"
                         class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition whitespace-nowrap">
@@ -147,6 +150,20 @@
                     </button>
                 </div>
                 <p id="importResult" class="text-sm mt-2 hidden"></p>
+            </section>
+
+            <!-- 数据库备份管理 -->
+            <section class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">数据库管理</h2>
+                <div class="flex flex-wrap gap-4 items-start mb-4">
+                    <button id="backupBtn"
+                        class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition min-h-[44px]">
+                        备份数据库
+                    </button>
+                </div>
+                <div id="backupListContainer">
+                    <p class="text-gray-500 text-sm">加载中...</p>
+                </div>
             </section>
 
             <!-- Logs Table -->
@@ -189,8 +206,8 @@
                             <option>无法考证</option>
                         </select>
                     </div>
-                    <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm">筛选</button>
-                    <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm">清除</button>
+                    <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm min-h-[44px]">筛选</button>
+                    <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm min-h-[44px]">清除</button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -229,7 +246,7 @@
 
     <!-- Change Password Modal -->
     <div id="pwdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm mx-2">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">修改密码</h2>
             <form id="changePwdForm">
                 <div class="mb-3">
@@ -242,6 +259,15 @@
                     <input type="password" id="newPassword" required
                         class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     <p class="text-xs text-gray-500 mt-1">至少 8 位，需包含大写字母、小写字母、数字、符号中的至少三类</p>
+                    <div id="pwStrength" class="mt-1 hidden">
+                        <div class="flex gap-1 h-1.5">
+                            <div id="pwBar1" class="flex-1 bg-gray-200 rounded"></div>
+                            <div id="pwBar2" class="flex-1 bg-gray-200 rounded"></div>
+                            <div id="pwBar3" class="flex-1 bg-gray-200 rounded"></div>
+                            <div id="pwBar4" class="flex-1 bg-gray-200 rounded"></div>
+                        </div>
+                        <p id="pwStrengthText" class="text-xs mt-1"></p>
+                    </div>
                 </div>
                 <div class="mb-4">
                     <label class="block text-sm text-gray-600 mb-1">确认新密码</label>
@@ -252,7 +278,7 @@
                 <p id="pwdSuccess" class="text-green-600 text-sm mb-3 hidden"></p>
                 <div class="flex gap-3">
                     <button type="submit"
-                        class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">确认修改</button>
+                        class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition min-h-[44px]">确认修改</button>
                     <button type="button" id="pwdModalClose"
                         class="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition">取消</button>
                 </div>
@@ -262,11 +288,11 @@
 
     <!-- 编辑记录弹窗 -->
     <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg mx-2 sm:mx-0">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">编辑记录</h2>
             <form id="editForm">
                 <input type="hidden" id="editId">
-                <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">呼号 *</label>
                         <input type="text" id="editCall" required
@@ -338,7 +364,7 @@
                 <p id="editError" class="text-red-500 text-sm mb-3 hidden"></p>
                 <div class="flex gap-3">
                     <button type="submit"
-                        class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">保存修改</button>
+                        class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition min-h-[44px]">保存修改</button>
                     <button type="button" id="editModalClose"
                         class="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition">取消</button>
                 </div>
@@ -346,7 +372,92 @@
         </div>
     </div>
 
+    <!-- 首次登录弹窗 -->
+    <div id="firstLoginModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md mx-2">
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">首次登录 - 请修改默认凭据</h2>
+            <p class="text-sm text-gray-500 mb-4">为保障安全，请修改默认用户名和密码。</p>
+            <form id="firstLoginForm">
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-600 mb-1">当前密码</label>
+                    <input type="password" id="flOldPassword" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-600 mb-1">新用户名</label>
+                    <input type="text" id="flNewUsername" required placeholder="至少5个字符"
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-600 mb-1">确认新用户名</label>
+                    <input type="text" id="flConfirmUsername" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm text-gray-600 mb-1">新密码</label>
+                    <input type="password" id="flNewPassword" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <p class="text-xs text-gray-500 mt-1">至少 8 位，需包含大写字母、小写字母、数字、符号中的至少三类</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-600 mb-1">确认新密码</label>
+                    <input type="password" id="flConfirmPassword" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                </div>
+                <p id="flError" class="text-red-500 text-sm mb-3 hidden"></p>
+                <button type="submit"
+                    class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition min-h-[44px]">确认修改</button>
+            </form>
+        </div>
+    </div>
+
     <script>
+        // ===== Toast 通知系统 =====
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const colors = {
+                success: 'bg-green-50 border-green-400 text-green-800',
+                error: 'bg-red-50 border-red-400 text-red-800',
+                warning: 'bg-yellow-50 border-yellow-400 text-yellow-800',
+                info: 'bg-blue-50 border-blue-400 text-blue-800',
+            };
+            const icons = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-lg border-l-4 shadow-lg ${colors[type]} transform translate-x-full opacity-0 transition-all duration-300`;
+            toast.innerHTML = `<span class="text-lg">${icons[type]}</span><span class="flex-1 text-sm">${message}</span><button onclick="this.parentElement.remove()" class="text-current opacity-50 hover:opacity-100 text-lg leading-none">&times;</button>`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
+            setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 3500);
+        }
+
+        // ===== Loading 状态 =====
+        function setLoading(buttonEl, loading) {
+            if (loading) {
+                buttonEl.disabled = true;
+                buttonEl.dataset.originalText = buttonEl.textContent;
+                buttonEl.innerHTML = '<svg class="animate-spin inline-block w-4 h-4 mr-1" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> 处理中...';
+            } else {
+                buttonEl.disabled = false;
+                buttonEl.textContent = buttonEl.dataset.originalText || '提交';
+            }
+        }
+
+        // ===== 实时校验系统 =====
+        function validateField(inputEl, validatorFns) {
+            const value = inputEl.value.trim();
+            let error = '';
+            for (const fn of validatorFns) { error = fn(value); if (error) break; }
+            let errEl = inputEl.parentElement.querySelector('.field-error');
+            if (!errEl) { errEl = document.createElement('p'); errEl.className = 'field-error text-red-500 text-xs mt-1 hidden'; inputEl.parentElement.appendChild(errEl); }
+            if (error) { errEl.textContent = error; errEl.classList.remove('hidden'); inputEl.classList.add('border-red-500'); inputEl.classList.remove('border-gray-300'); return false; }
+            else { errEl.classList.add('hidden'); inputEl.classList.remove('border-red-500'); inputEl.classList.add('border-gray-300'); return true; }
+        }
+        const validators = {
+            date: (v) => { if (!v) return ''; if (!/^\d{8}$/.test(v)) return '日期必须为8位数字 (YYYYMMDD)'; const m = parseInt(v.substring(4,6),10), d = parseInt(v.substring(6,8),10); if (m<1||m>12) return '月份必须在 01-12 之间'; if (d<1||d>31) return '日期必须在 01-31 之间'; return ''; },
+            time: (v) => { if (!v) return ''; if (!/^\d{6}$/.test(v)) return '时间必须为6位数字 (HHMMSS)'; const h=parseInt(v.substring(0,2),10), m=parseInt(v.substring(2,4),10), s=parseInt(v.substring(4,6),10); if (h>23) return '小时必须在 00-23 之间'; if (m>59) return '分钟必须在 00-59 之间'; if (s>59) return '秒必须在 00-59 之间'; return ''; },
+            rst: (mode) => (v) => { if (!v) return ''; if (mode === 'CW') { if (!/^\d{3}$/.test(v)) return 'CW模式 RST必须为3位数字'; } else { if (!/^\d{2}$/.test(v)) return 'RST必须为2位数字 (如 59)'; } return ''; },
+        };
+
         const STATUS_OPTIONS = ['无法考证', '未发送', '已发送', '无需发送', '电子确认'];
         const BAND_FREQ = {
             '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
@@ -383,9 +494,7 @@
             if (band) document.getElementById('bandSelect').value = band;
         });
         document.getElementById('bandSelect').addEventListener('change', function() {
-            if (this.value && BAND_FREQ[this.value]) {
-                document.getElementById('freqInput').value = BAND_FREQ[this.value].split('-')[0];
-            }
+            if (this.value && BAND_FREQ[this.value]) document.getElementById('freqInput').value = BAND_FREQ[this.value].split('-')[0];
         });
 
         // ===== 频率 <-> 波段联动（编辑弹窗）=====
@@ -394,47 +503,69 @@
             if (band) document.getElementById('editBand').value = band;
         });
         document.getElementById('editBand').addEventListener('change', function() {
-            if (this.value && BAND_FREQ[this.value]) {
-                document.getElementById('editFreq').value = BAND_FREQ[this.value].split('-')[0];
-            }
+            if (this.value && BAND_FREQ[this.value]) document.getElementById('editFreq').value = BAND_FREQ[this.value].split('-')[0];
+        });
+
+        // ===== 录入表单 blur 校验 =====
+        const addFormEl = document.getElementById('addForm');
+        addFormEl.querySelector('[name="qso_date"]').addEventListener('blur', function() { validateField(this, [validators.date]); });
+        addFormEl.querySelector('[name="time_on"]').addEventListener('blur', function() { validateField(this, [validators.time]); });
+        addFormEl.querySelector('[name="rst_sent"]').addEventListener('blur', function() { validateField(this, [validators.rst(addFormEl.querySelector('[name="mode"]').value)]); });
+        addFormEl.querySelector('[name="rst_rcvd"]').addEventListener('blur', function() { validateField(this, [validators.rst(addFormEl.querySelector('[name="mode"]').value)]); });
+
+        // ===== 编辑弹窗 blur 校验 =====
+        document.getElementById('editQsoDate').addEventListener('blur', function() { validateField(this, [validators.date]); });
+        document.getElementById('editTimeOn').addEventListener('blur', function() { validateField(this, [validators.time]); });
+        document.getElementById('editRstSent').addEventListener('blur', function() { validateField(this, [validators.rst(document.getElementById('editMode').value)]); });
+        document.getElementById('editRstRcvd').addEventListener('blur', function() { validateField(this, [validators.rst(document.getElementById('editMode').value)]); });
+
+        // ===== 密码强度指示器 =====
+        document.getElementById('newPassword').addEventListener('input', function() {
+            const v = this.value, container = document.getElementById('pwStrength');
+            const bars = [document.getElementById('pwBar1'), document.getElementById('pwBar2'), document.getElementById('pwBar3'), document.getElementById('pwBar4')];
+            const text = document.getElementById('pwStrengthText');
+            if (!v) { container.classList.add('hidden'); return; }
+            container.classList.remove('hidden');
+            let cats = 0;
+            if (/[A-Z]/.test(v)) cats++; if (/[a-z]/.test(v)) cats++; if (/[0-9]/.test(v)) cats++; if (/[^A-Za-z0-9]/.test(v)) cats++;
+            const level = v.length >= 8 ? cats : Math.max(0, cats - 1);
+            const colors = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-400'];
+            const labels = ['弱', '一般', '良好', '强'];
+            for (let i = 0; i < 4; i++) bars[i].className = `flex-1 rounded ${i < level ? colors[level-1] : 'bg-gray-200'}`;
+            text.textContent = v.length < 8 ? `还需 ${8 - v.length} 位字符` : labels[level-1] || '弱';
+            text.className = `text-xs mt-1 ${level >= 3 ? 'text-green-600' : level >= 2 ? 'text-yellow-600' : 'text-red-500'}`;
         });
 
         // ===== 登录状态检查 =====
         fetch('/api/admin/check').then(r => r.json()).then(data => {
             if (data.logged_in) showAdmin();
-        });
+        }).catch(() => {});
 
         // ===== 登录 =====
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             fetch('/api/admin/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username, password})
-            }).then(r => {
-                if (r.ok) { showAdmin(); }
-                else {
-                    r.json().then(data => {
-                        document.getElementById('loginError').textContent = data.detail || '登录失败';
-                        document.getElementById('loginError').classList.remove('hidden');
-                    });
-                }
-            });
+            }).then(r => { if (r.ok) { r.json().then(() => showAdmin()); } else { r.json().then(data => { document.getElementById('loginError').textContent = data.detail || '登录失败'; document.getElementById('loginError').classList.remove('hidden'); }); } setLoading(btn, false); })
+            .catch(() => { showToast('登录请求失败', 'error'); setLoading(btn, false); });
         });
 
         // ===== 退出登录 =====
         document.getElementById('logoutBtn').addEventListener('click', function() {
-            fetch('/api/admin/logout', {method: 'POST'}).then(() => location.reload());
+            fetch('/api/admin/logout', {method: 'POST'}).then(() => location.reload()).catch(() => location.reload());
         });
 
         // ===== 修改密码弹窗 =====
         document.getElementById('changePwdBtn').addEventListener('click', function() {
             document.getElementById('pwdModal').classList.remove('hidden');
             document.getElementById('pwdError').classList.add('hidden');
-            document.getElementById('pwdSuccess').classList.add('hidden');
             document.getElementById('changePwdForm').reset();
+            document.getElementById('pwStrength').classList.add('hidden');
         });
         document.getElementById('pwdModalClose').addEventListener('click', function() {
             document.getElementById('pwdModal').classList.add('hidden');
@@ -445,45 +576,22 @@
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
             const errEl = document.getElementById('pwdError');
-            const okEl = document.getElementById('pwdSuccess');
             errEl.classList.add('hidden');
-            okEl.classList.add('hidden');
-
-            if (newPassword !== confirmPassword) {
-                errEl.textContent = '两次输入的新密码不一致';
-                errEl.classList.remove('hidden');
-                return;
-            }
-            if (newPassword.length < 8) {
-                errEl.textContent = '密码长度至少为 8 位';
-                errEl.classList.remove('hidden');
-                return;
-            }
+            if (newPassword !== confirmPassword) { errEl.textContent = '两次输入的新密码不一致'; errEl.classList.remove('hidden'); return; }
+            if (newPassword.length < 8) { errEl.textContent = '密码长度至少为 8 位'; errEl.classList.remove('hidden'); return; }
             let cats = 0;
-            if (/[A-Z]/.test(newPassword)) cats++;
-            if (/[a-z]/.test(newPassword)) cats++;
-            if (/[0-9]/.test(newPassword)) cats++;
-            if (/[^A-Za-z0-9]/.test(newPassword)) cats++;
-            if (cats < 3) {
-                errEl.textContent = '密码需包含大写字母、小写字母、数字、符号中的至少三类';
-                errEl.classList.remove('hidden');
-                return;
-            }
-
+            if (/[A-Z]/.test(newPassword)) cats++; if (/[a-z]/.test(newPassword)) cats++; if (/[0-9]/.test(newPassword)) cats++; if (/[^A-Za-z0-9]/.test(newPassword)) cats++;
+            if (cats < 3) { errEl.textContent = '密码需包含大写字母、小写字母、数字、符号中的至少三类'; errEl.classList.remove('hidden'); return; }
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
             fetch('/api/admin/change-password', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({old_password: oldPassword, new_password: newPassword})
             }).then(r => r.json().then(data => {
-                if (r.ok) {
-                    okEl.textContent = '密码修改成功，请重新登录';
-                    okEl.classList.remove('hidden');
-                    setTimeout(() => { location.reload(); }, 1500);
-                } else {
-                    errEl.textContent = data.detail || '修改失败';
-                    errEl.classList.remove('hidden');
-                }
-            }));
+                setLoading(btn, false);
+                if (r.ok) { showToast('密码修改成功，即将重新登录', 'success'); setTimeout(() => location.reload(), 1500); }
+                else { errEl.textContent = data.detail || '修改失败'; errEl.classList.remove('hidden'); }
+            })).catch(() => { setLoading(btn, false); showToast('请求失败', 'error'); });
         });
 
         // ===== 显示管理后台 =====
@@ -491,7 +599,45 @@
             document.getElementById('loginPage').classList.add('hidden');
             document.getElementById('adminPage').classList.remove('hidden');
             loadLogs();
+            checkFirstLogin();
+            loadBackups();
         }
+
+        // ===== 首次登录处理 =====
+        function checkFirstLogin() {
+            fetch('/api/admin/first-login-status').then(r => r.json()).then(data => {
+                if (data.first_login) document.getElementById('firstLoginModal').classList.remove('hidden');
+            }).catch(() => {});
+        }
+        document.getElementById('firstLoginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const errEl = document.getElementById('flError');
+            errEl.classList.add('hidden');
+            const data = {
+                old_password: document.getElementById('flOldPassword').value,
+                new_username: document.getElementById('flNewUsername').value.trim(),
+                confirm_username: document.getElementById('flConfirmUsername').value.trim(),
+                new_password: document.getElementById('flNewPassword').value,
+                confirm_password: document.getElementById('flConfirmPassword').value,
+            };
+            if (data.new_username.length < 5) { errEl.textContent = '用户名长度至少为 5 个字符'; errEl.classList.remove('hidden'); return; }
+            if (data.new_username !== data.confirm_username) { errEl.textContent = '两次输入的用户名不一致'; errEl.classList.remove('hidden'); return; }
+            if (data.new_password !== data.confirm_password) { errEl.textContent = '两次输入的密码不一致'; errEl.classList.remove('hidden'); return; }
+            if (data.new_password.length < 8) { errEl.textContent = '密码长度至少为 8 位'; errEl.classList.remove('hidden'); return; }
+            let cats = 0;
+            if (/[A-Z]/.test(data.new_password)) cats++; if (/[a-z]/.test(data.new_password)) cats++; if (/[0-9]/.test(data.new_password)) cats++; if (/[^A-Za-z0-9]/.test(data.new_password)) cats++;
+            if (cats < 3) { errEl.textContent = '密码需包含大写字母、小写字母、数字、符号中的至少三类'; errEl.classList.remove('hidden'); return; }
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+            fetch('/api/admin/complete-first-login', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.json().then(result => {
+                setLoading(btn, false);
+                if (r.ok) { showToast('凭据修改成功，即将刷新页面', 'success'); setTimeout(() => location.reload(), 1500); }
+                else { errEl.textContent = result.detail || '修改失败'; errEl.classList.remove('hidden'); }
+            })).catch(() => { setLoading(btn, false); showToast('请求失败', 'error'); });
+        });
 
         // ===== 分页与筛选状态 =====
         let currentPage = 1;
@@ -507,28 +653,21 @@
             if (currentFilters.band) params.set('band', currentFilters.band);
             if (currentFilters.mode) params.set('mode', currentFilters.mode);
             if (currentFilters.qsl_status) params.set('qsl_status', currentFilters.qsl_status);
-
             fetch(`/api/admin/logs?${params}`).then(r => r.json()).then(data => {
                 allLogs = data.logs;
                 renderLogsTable(data);
                 renderPagination(data);
-            });
+            }).catch(() => showToast('加载记录失败', 'error'));
         }
 
         // ===== 渲染记录表格 =====
         function renderLogsTable(data) {
             const tbody = document.getElementById('logsTableBody');
             const noLogs = document.getElementById('noLogs');
-            if (data.logs.length === 0) {
-                noLogs.classList.remove('hidden');
-                tbody.innerHTML = '';
-                return;
-            }
+            if (data.logs.length === 0) { noLogs.classList.remove('hidden'); tbody.innerHTML = ''; return; }
             noLogs.classList.add('hidden');
             tbody.innerHTML = data.logs.map(log => {
-                const statusOpts = STATUS_OPTIONS.map(s =>
-                    `<option value="${s}" ${s === log.qsl_status ? 'selected' : ''}>${s}</option>`
-                ).join('');
+                const statusOpts = STATUS_OPTIONS.map(s => `<option value="${s}" ${s === log.qsl_status ? 'selected' : ''}>${s}</option>`).join('');
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500">${log.id}</td>
                     <td class="px-3 py-2 font-medium">${log.call}</td>
@@ -538,15 +677,10 @@
                     <td class="px-3 py-2 text-gray-600">${bandFreq(log.band)}</td>
                     <td class="px-3 py-2">${log.mode || '-'}</td>
                     <td class="px-3 py-2">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
-                    <td class="px-3 py-2">
-                        <select onchange="updateStatus(${log.id}, this.value)"
-                            class="border rounded px-2 py-1 text-xs">${statusOpts}</select>
-                    </td>
+                    <td class="px-3 py-2"><select onchange="updateStatus(${log.id}, this.value)" class="border rounded px-2 py-1 text-xs">${statusOpts}</select></td>
                     <td class="px-3 py-2 whitespace-nowrap">
-                        <button onclick="openEditModal(${log.id})"
-                            class="text-blue-600 hover:text-blue-800 text-xs mr-2">编辑</button>
-                        <button onclick="deleteLog(${log.id})"
-                            class="text-red-600 hover:text-red-800 text-xs">删除</button>
+                        <button onclick="openEditModal(${log.id})" class="text-blue-600 hover:text-blue-800 text-xs mr-2">编辑</button>
+                        <button onclick="deleteLog(${log.id})" class="text-red-600 hover:text-red-800 text-xs">删除</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -557,70 +691,43 @@
             const totalPages = Math.ceil(data.total / data.page_size);
             const info = document.getElementById('paginationInfo');
             const btns = document.getElementById('paginationButtons');
-            if (data.total === 0) {
-                info.textContent = '';
-                btns.innerHTML = '';
-                return;
-            }
+            if (data.total === 0) { info.textContent = ''; btns.innerHTML = ''; return; }
             info.textContent = `共 ${data.total} 条记录，第 ${data.page}/${totalPages} 页`;
-
             let html = '';
-            if (data.page > 1) {
-                html += `<button onclick="goToPage(${data.page - 1})" class="px-3 py-1 border rounded hover:bg-gray-50">上一页</button>`;
-            }
-            // 页码按钮（最多显示7个）
-            let startPage = Math.max(1, data.page - 3);
-            let endPage = Math.min(totalPages, startPage + 6);
+            if (data.page > 1) html += `<button onclick="goToPage(${data.page - 1})" class="px-3 py-1 border rounded hover:bg-gray-50">上一页</button>`;
+            let startPage = Math.max(1, data.page - 3), endPage = Math.min(totalPages, startPage + 6);
             if (endPage - startPage < 6) startPage = Math.max(1, endPage - 6);
             for (let i = startPage; i <= endPage; i++) {
-                const active = i === data.page ? 'bg-blue-600 text-white' : 'hover:bg-gray-50';
-                html += `<button onclick="goToPage(${i})" class="px-3 py-1 border rounded ${active}">${i}</button>`;
+                html += `<button onclick="goToPage(${i})" class="px-3 py-1 border rounded ${i === data.page ? 'bg-blue-600 text-white' : 'hover:bg-gray-50'}">${i}</button>`;
             }
-            if (data.page < totalPages) {
-                html += `<button onclick="goToPage(${data.page + 1})" class="px-3 py-1 border rounded hover:bg-gray-50">下一页</button>`;
-            }
+            if (data.page < totalPages) html += `<button onclick="goToPage(${data.page + 1})" class="px-3 py-1 border rounded hover:bg-gray-50">下一页</button>`;
             btns.innerHTML = html;
         }
-
-        function goToPage(page) {
-            currentPage = page;
-            loadLogs();
-        }
+        function goToPage(page) { currentPage = page; loadLogs(); }
 
         // ===== 筛选控件 =====
         document.getElementById('filterApply').addEventListener('click', function() {
-            currentFilters = {
-                call: document.getElementById('filterCall').value.trim(),
-                band: document.getElementById('filterBand').value,
-                mode: document.getElementById('filterMode').value,
-                qsl_status: document.getElementById('filterStatus').value,
-            };
-            currentPage = 1;
-            loadLogs();
+            currentFilters = { call: document.getElementById('filterCall').value.trim(), band: document.getElementById('filterBand').value, mode: document.getElementById('filterMode').value, qsl_status: document.getElementById('filterStatus').value };
+            currentPage = 1; loadLogs();
         });
         document.getElementById('filterClear').addEventListener('click', function() {
-            document.getElementById('filterCall').value = '';
-            document.getElementById('filterBand').value = '';
-            document.getElementById('filterMode').value = '';
-            document.getElementById('filterStatus').value = '';
-            currentFilters = {};
-            currentPage = 1;
-            loadLogs();
+            document.getElementById('filterCall').value = ''; document.getElementById('filterBand').value = ''; document.getElementById('filterMode').value = ''; document.getElementById('filterStatus').value = '';
+            currentFilters = {}; currentPage = 1; loadLogs();
         });
 
         // ===== 修改卡片状态 =====
         function updateStatus(id, status) {
-            fetch(`/api/admin/logs/${id}/status`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({qsl_status: status})
-            });
+            fetch(`/api/admin/logs/${id}/status`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({qsl_status: status}) })
+                .then(r => { if (r.ok) showToast('状态已更新', 'success'); else showToast('状态更新失败', 'error'); })
+                .catch(() => showToast('状态更新失败', 'error'));
         }
 
         // ===== 删除记录 =====
         function deleteLog(id) {
             if (!confirm('确定删除这条记录？')) return;
-            fetch(`/api/admin/logs/${id}`, {method: 'DELETE'}).then(() => loadLogs());
+            fetch(`/api/admin/logs/${id}`, {method: 'DELETE'})
+                .then(r => { if (r.ok) { showToast('记录已删除', 'success'); loadLogs(); } else showToast('删除失败', 'error'); })
+                .catch(() => showToast('删除失败', 'error'));
         }
 
         // ===== 编辑记录弹窗 =====
@@ -632,10 +739,7 @@
             document.getElementById('editQsoDate').value = log.qso_date || '';
             document.getElementById('editTimeOn').value = log.time_on || '';
             document.getElementById('editBand').value = log.band || '';
-            document.getElementById('editFreq').value = '';
-            if (log.band && BAND_FREQ[log.band]) {
-                document.getElementById('editFreq').value = BAND_FREQ[log.band].split('-')[0];
-            }
+            document.getElementById('editFreq').value = log.band && BAND_FREQ[log.band] ? BAND_FREQ[log.band].split('-')[0] : '';
             document.getElementById('editMode').value = log.mode || '';
             document.getElementById('editRstSent').value = log.rst_sent || '';
             document.getElementById('editRstRcvd').value = log.rst_rcvd || '';
@@ -644,65 +748,25 @@
             document.getElementById('editError').classList.add('hidden');
             document.getElementById('editModal').classList.remove('hidden');
         }
-
-        function closeEditModal() {
-            document.getElementById('editModal').classList.add('hidden');
-            document.getElementById('editError').classList.add('hidden');
-        }
-
+        function closeEditModal() { document.getElementById('editModal').classList.add('hidden'); document.getElementById('editError').classList.add('hidden'); }
         document.getElementById('editModalClose').addEventListener('click', closeEditModal);
 
         document.getElementById('editForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const id = document.getElementById('editId').value;
-            const data = {};
-            data.call = document.getElementById('editCall').value.trim();
-            data.qso_date = document.getElementById('editQsoDate').value.trim();
-            data.time_on = document.getElementById('editTimeOn').value.trim();
-            data.band = document.getElementById('editBand').value;
-            data.mode = document.getElementById('editMode').value;
-            data.rst_sent = document.getElementById('editRstSent').value.trim();
-            data.rst_rcvd = document.getElementById('editRstRcvd').value.trim();
-            data.qsl_status = document.getElementById('editQslStatus').value;
-            data.comment = document.getElementById('editComment').value.trim();
-
-            // 频率 -> 波段同步
+            const data = { call: document.getElementById('editCall').value.trim(), qso_date: document.getElementById('editQsoDate').value.trim(), time_on: document.getElementById('editTimeOn').value.trim(), band: document.getElementById('editBand').value, mode: document.getElementById('editMode').value, rst_sent: document.getElementById('editRstSent').value.trim(), rst_rcvd: document.getElementById('editRstRcvd').value.trim(), qsl_status: document.getElementById('editQslStatus').value, comment: document.getElementById('editComment').value.trim() };
             const freq = document.getElementById('editFreq').value.trim();
-            if (freq) {
-                const band = freqToBand(freq);
-                if (band) data.band = band;
-            }
-
-            // 必填字段校验
-            const requiredFields = {call: '呼号', qso_date: '日期', time_on: '时间', mode: '模式', rst_sent: 'RST发送', rst_rcvd: 'RST接收', qsl_status: '卡片状态'};
+            if (freq) { const band = freqToBand(freq); if (band) data.band = band; }
+            const requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             const missing = [];
-            for (const [k, label] of Object.entries(requiredFields)) {
-                if (!data[k]) missing.push(label);
-            }
+            for (const [k, label] of Object.entries(requiredFields)) { if (!data[k]) missing.push(label); }
             if (!data.band) missing.push('波段或频率');
-            if (missing.length) {
-                const errEl = document.getElementById('editError');
-                errEl.textContent = '请填写必填字段：' + missing.join('、');
-                errEl.classList.remove('hidden');
-                return;
-            }
-
-            fetch(`/api/admin/logs/${id}`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).then(r => {
-                if (r.ok) {
-                    closeEditModal();
-                    loadLogs();
-                } else {
-                    r.json().then(result => {
-                        const errEl = document.getElementById('editError');
-                        errEl.textContent = result.detail || '保存失败';
-                        errEl.classList.remove('hidden');
-                    });
-                }
-            });
+            if (missing.length) { document.getElementById('editError').textContent = '请填写必填字段：' + missing.join('、'); document.getElementById('editError').classList.remove('hidden'); return; }
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+            fetch(`/api/admin/logs/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                .then(r => { setLoading(btn, false); if (r.ok) { closeEditModal(); loadLogs(); showToast('记录已更新', 'success'); } else r.json().then(result => { document.getElementById('editError').textContent = result.detail || '保存失败'; document.getElementById('editError').classList.remove('hidden'); }); })
+                .catch(() => { setLoading(btn, false); showToast('保存失败', 'error'); });
         });
 
         // ===== 添加记录 =====
@@ -711,55 +775,33 @@
             const form = e.target;
             const data = {};
             new FormData(form).forEach((v, k) => { if (v) data[k] = v; });
-
-            // 频率 -> 波段同步
             const freq = document.getElementById('freqInput').value.trim();
-            if (freq) {
-                const band = freqToBand(freq);
-                if (band) data.band = band;
-            }
-
-            // 必填字段校验
-            const requiredFields = {call: '呼号', qso_date: '日期', time_on: '时间', mode: '模式', rst_sent: 'RST发送', rst_rcvd: 'RST接收', qsl_status: '卡片状态'};
+            if (freq) { const band = freqToBand(freq); if (band) data.band = band; }
+            const requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             const missing = [];
-            for (const [k, label] of Object.entries(requiredFields)) {
-                if (!data[k]) missing.push(label);
-            }
+            for (const [k, label] of Object.entries(requiredFields)) { if (!data[k]) missing.push(label); }
             if (!data.band) missing.push('波段或频率');
-            if (missing.length) {
-                alert('请填写必填字段：' + missing.join('、'));
-                return;
-            }
-
-            fetch('/api/admin/logs', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).then(r => {
-                if (r.status === 409) {
-                    // 重复记录处理
-                    r.json().then(result => {
-                        if (confirm(result.detail + '\n\n是否强制添加？')) {
-                            data.force = true;
-                            fetch('/api/admin/logs', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify(data)
-                            }).then(r2 => r2.json()).then(() => {
-                                form.reset();
-                                loadLogs();
-                            });
-                        }
-                    });
-                    return;
-                }
-                return r.json();
-            }).then(result => {
-                if (result && result.ok) {
-                    form.reset();
-                    loadLogs();
-                }
-            });
+            if (missing.length) { showToast('请填写必填字段：' + missing.join('、'), 'warning'); return; }
+            const btn = form.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+            fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                .then(r => {
+                    if (r.status === 409) {
+                        r.json().then(result => {
+                            setLoading(btn, false);
+                            if (confirm(result.detail + '\n\n是否强制添加？')) {
+                                data.force = true;
+                                setLoading(btn, true);
+                                fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                                    .then(r2 => r2.json()).then(() => { form.reset(); loadLogs(); showToast('记录已添加', 'success'); setLoading(btn, false); })
+                                    .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
+                            }
+                        });
+                        return;
+                    }
+                    return r.json();
+                }).then(result => { setLoading(btn, false); if (result && result.ok) { form.reset(); loadLogs(); showToast('QSO 添加成功', 'success'); } })
+                .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
         });
 
         // ===== ADIF 导入（含重复检测）=====
@@ -770,70 +812,117 @@
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('force', 'false');
-            fetch('/api/admin/import-adif', {
-                method: 'POST',
-                body: formData
-            }).then(r => r.json()).then(data => {
-                const p = document.getElementById('importResult');
-                p.classList.remove('hidden');
-                if (data.ok) {
-                    p.className = 'text-sm mt-2 text-green-600';
-                    p.textContent = `成功导入 ${data.count} 条记录`;
-                    loadLogs();
-                } else if (data.duplicates && data.duplicates.length > 0) {
-                    p.className = 'text-sm mt-2 text-yellow-600';
-                    p.innerHTML = `发现 ${data.duplicate_count} 条重复记录（共 ${data.total} 条）。` +
-                        `<button onclick="forceImport()" class="ml-2 underline text-blue-600">强制导入全部</button>`;
-                } else {
-                    p.className = 'text-sm mt-2 text-red-600';
-                    p.textContent = data.detail || '导入失败';
-                }
-            });
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+            fetch('/api/admin/import-adif', { method: 'POST', body: formData })
+                .then(r => r.json()).then(data => {
+                    setLoading(btn, false);
+                    const p = document.getElementById('importResult');
+                    p.classList.remove('hidden');
+                    if (data.ok) { p.className = 'text-sm mt-2 text-green-600'; p.textContent = `成功导入 ${data.count} 条记录`; loadLogs(); showToast(`导入完成：新增 ${data.count} 条`, 'success'); }
+                    else if (data.duplicates && data.duplicates.length > 0) { p.className = 'text-sm mt-2 text-yellow-600'; p.innerHTML = `发现 ${data.duplicate_count} 条重复记录（共 ${data.total} 条）。<button onclick="forceImport()" class="ml-2 underline text-blue-600">强制导入全部</button>`; }
+                    else { p.className = 'text-sm mt-2 text-red-600'; p.textContent = data.detail || '导入失败'; showToast(data.detail || '导入失败', 'error'); }
+                }).catch(() => { setLoading(btn, false); showToast('导入请求失败', 'error'); });
         });
-
         function forceImport() {
             const fileInput = document.getElementById('adifFile');
             if (!fileInput.files.length) return;
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('force', 'true');
-            fetch('/api/admin/import-adif', {
-                method: 'POST',
-                body: formData
-            }).then(r => r.json()).then(data => {
-                const p = document.getElementById('importResult');
-                p.classList.remove('hidden');
-                if (data.ok) {
-                    p.className = 'text-sm mt-2 text-green-600';
-                    p.textContent = `成功导入 ${data.count} 条记录`;
-                } else {
-                    p.className = 'text-sm mt-2 text-red-600';
-                    p.textContent = data.detail || '导入失败';
+            fetch('/api/admin/import-adif', { method: 'POST', body: formData })
+                .then(r => r.json()).then(data => {
+                    const p = document.getElementById('importResult');
+                    p.classList.remove('hidden');
+                    if (data.ok) { p.className = 'text-sm mt-2 text-green-600'; p.textContent = `成功导入 ${data.count} 条记录`; loadLogs(); showToast(`导入完成：共 ${data.count} 条`, 'success'); }
+                    else { p.className = 'text-sm mt-2 text-red-600'; p.textContent = data.detail || '导入失败'; showToast(data.detail || '导入失败', 'error'); }
+                }).catch(() => showToast('导入请求失败', 'error'));
+        }
+
+        // ===== 导出 =====
+        document.getElementById('exportBtn').addEventListener('click', function() { window.location.href = '/api/admin/export-adif'; });
+        document.getElementById('exportCsvBtn').addEventListener('click', function() { window.location.href = '/api/admin/export-csv'; });
+
+        // ===== 数据库备份管理 =====
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function loadBackups() {
+            fetch('/api/admin/backups').then(r => r.json()).then(data => {
+                const container = document.getElementById('backupListContainer');
+                if (!data.backups || data.backups.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-sm">暂无备份记录</p>';
+                    return;
                 }
-                loadLogs();
+                let html = '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-gray-50 text-gray-600"><tr>';
+                html += '<th class="px-3 py-2">文件名</th><th class="px-3 py-2">大小</th><th class="px-3 py-2">创建时间</th><th class="px-3 py-2">操作</th></tr></thead><tbody>';
+                data.backups.forEach(b => {
+                    html += `<tr class="border-b hover:bg-gray-50">
+                        <td class="px-3 py-2 font-mono text-xs">${b.filename}</td>
+                        <td class="px-3 py-2">${formatSize(b.size)}</td>
+                        <td class="px-3 py-2">${b.created_at}</td>
+                        <td class="px-3 py-2 whitespace-nowrap">
+                            <button onclick="downloadBackup('${b.filename}')" class="text-blue-600 hover:text-blue-800 text-xs mr-2">下载</button>
+                            <button onclick="restoreFromBackup('${b.filename}')" class="text-orange-600 hover:text-orange-800 text-xs mr-2">恢复</button>
+                            <button onclick="deleteBackup('${b.filename}')" class="text-red-600 hover:text-red-800 text-xs">删除</button>
+                        </td>
+                    </tr>`;
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+            }).catch(() => {
+                document.getElementById('backupListContainer').innerHTML = '<p class="text-red-500 text-sm">加载备份列表失败</p>';
             });
         }
 
-        // ===== 导出 ADIF =====
-        document.getElementById('exportBtn').addEventListener('click', function() {
-            window.location.href = '/api/admin/export-adif';
+        document.getElementById('backupBtn').addEventListener('click', function() {
+            const btn = this;
+            setLoading(btn, true);
+            fetch('/api/admin/backup', { method: 'POST' })
+                .then(r => r.json()).then(data => {
+                    setLoading(btn, false);
+                    if (data.ok) { showToast('备份成功', 'success'); loadBackups(); }
+                    else showToast(data.detail || '备份失败', 'error');
+                }).catch(() => { setLoading(btn, false); showToast('备份请求失败', 'error'); });
         });
 
-        // ===== 导出 CSV =====
-        document.getElementById('exportCsvBtn').addEventListener('click', function() {
-            window.location.href = '/api/admin/export-csv';
-        });
+        function downloadBackup(filename) {
+            window.location.href = '/api/admin/backups/' + encodeURIComponent(filename);
+        }
+
+        function deleteBackup(filename) {
+            if (!confirm('确定删除备份 ' + filename + '？')) return;
+            fetch('/api/admin/backups/' + encodeURIComponent(filename), { method: 'DELETE' })
+                .then(r => r.json()).then(data => {
+                    if (data.ok) { showToast('备份已删除', 'success'); loadBackups(); }
+                    else showToast(data.detail || '删除失败', 'error');
+                }).catch(() => showToast('删除请求失败', 'error'));
+        }
+
+        function restoreFromBackup(filename) {
+            if (!confirm('确定要恢复到备份 ' + filename + '？\n当前数据库将自动备份。')) return;
+            fetch('/api/admin/restore', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ filename: filename })
+            }).then(r => r.json()).then(data => {
+                if (data.ok) {
+                    showToast('数据库已恢复（安全备份: ' + data.safety_backup + '）', 'success');
+                    loadLogs();
+                    loadBackups();
+                } else {
+                    showToast(data.detail || '恢复失败', 'error');
+                }
+            }).catch(() => showToast('恢复请求失败', 'error'));
+        }
 
         // ===== 时钟 =====
         function updateClocks() {
             const now = new Date();
-            const fmt = (tz) => {
-                const d = new Date(now.toLocaleString('en-US', {timeZone: tz}));
-                return [d.getHours(), d.getMinutes(), d.getSeconds()]
-                    .map(n => String(n).padStart(2, '0')).join(':');
-            };
-            document.getElementById('clocks').textContent =
-                `北京时间 ${fmt('Asia/Shanghai')}  |  UTC ${fmt('UTC')}`;
+            const fmt = (tz) => { const d = new Date(now.toLocaleString('en-US', {timeZone: tz})); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':'); };
+            document.getElementById('clocks').textContent = `北京时间 ${fmt('Asia/Shanghai')}  |  UTC ${fmt('UTC')}`;
         }
         updateClocks();
         setInterval(updateClocks, 1000);

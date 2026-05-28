@@ -7,6 +7,11 @@ from config import DATABASE_PATH
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
 
 
+def _escape_like(value: str) -> str:
+    """转义 SQLite LIKE 通配符（% 和 _），防止 LIKE 模式注入"""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def get_conn():
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
@@ -45,6 +50,11 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
+    # 迁移：添加 first_login 列
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
+    except Exception:
+        pass  # 列已存在
     conn.commit()
     conn.close()
     seed_admin_user()
@@ -55,12 +65,14 @@ def seed_admin_user():
     conn = get_conn()
     row = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()
     if row["cnt"] == 0:
-        pw_hash, _ = hash_password("Admin123!")
+        pw_hash = hash_password("Admin123!")
         conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            "INSERT INTO users (username, password_hash, first_login) VALUES (?, ?, 1)",
             ("admin", pw_hash),
         )
-        conn.commit()
+    # 升级兼容：确保所有用户有 first_login 列
+    conn.execute("UPDATE users SET first_login = 1 WHERE first_login IS NULL")
+    conn.commit()
     conn.close()
 
 
@@ -145,8 +157,8 @@ def get_recent_logs(limit: int = 20) -> list[dict]:
 def search_logs_by_call(call: str) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM logs WHERE call LIKE ? ORDER BY qso_date DESC, time_on DESC",
-        (f"%{call}%",),
+        "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC",
+        (f"%{_escape_like(call)}%",),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -207,8 +219,8 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
     conditions = ["1=1"]
     params = []
     if filters.get("call"):
-        conditions.append("call LIKE ?")
-        params.append(f"%{filters['call']}%")
+        conditions.append("call LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(filters['call'])}%")
     if filters.get("band"):
         conditions.append("band = ?")
         params.append(filters["band"])
@@ -293,3 +305,72 @@ def export_csv(records: list[dict]) -> str:
             rec.get("comment", ""),
         ])
     return output.getvalue()
+
+
+def complete_first_login(username: str, new_username: str, new_password_hash: str) -> bool:
+    """完成首次登录：更新凭据，设置 first_login=0"""
+    conn = get_conn()
+    # 检查新用户名是否已被其他用户占用
+    existing = conn.execute(
+        "SELECT id FROM users WHERE username = ? AND username != ?",
+        (new_username, username),
+    ).fetchone()
+    if existing:
+        conn.close()
+        return False
+    cur = conn.execute(
+        "UPDATE users SET username = ?, password_hash = ?, first_login = 0 WHERE username = ?",
+        (new_username, new_password_hash, username),
+    )
+    conn.commit()
+    updated = cur.rowcount > 0
+    conn.close()
+    return updated
+
+
+def get_recent_logs_paginated(band: str = None, mode: str = None, page: int = 1, page_size: int = 20) -> dict:
+    """分页查询最近通联记录，支持波段和模式筛选"""
+    conditions = ["1=1"]
+    params = []
+    if band:
+        conditions.append("band = ?")
+        params.append(band)
+    if mode:
+        conditions.append("mode = ?")
+        params.append(mode)
+    where = " AND ".join(conditions)
+    conn = get_conn()
+    total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+    offset = (page - 1) * page_size
+    rows = conn.execute(
+        f"SELECT * FROM logs WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        params + [page_size, offset],
+    ).fetchall()
+    conn.close()
+    return {
+        "logs": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def search_logs_by_call_paginated(call: str, page: int = 1, page_size: int = 20) -> dict:
+    """分页按呼号搜索通联记录"""
+    conn = get_conn()
+    total = conn.execute(
+        "SELECT COUNT(*) as cnt FROM logs WHERE call LIKE ? ESCAPE '\\'",
+        (f"%{_escape_like(call)}%",),
+    ).fetchone()["cnt"]
+    offset = (page - 1) * page_size
+    rows = conn.execute(
+        "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
+        (f"%{_escape_like(call)}%", page_size, offset),
+    ).fetchall()
+    conn.close()
+    return {
+        "logs": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }

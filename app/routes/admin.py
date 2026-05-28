@@ -1,7 +1,8 @@
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from app.auth import check_admin, require_admin, verify_password, hash_password, validate_password_strength
+from app.rate_limit import get_client_ip, check_rate_limit, record_failure, clear_attempts
 from app.database import (
     insert_log,
     update_log,
@@ -15,25 +16,51 @@ from app.database import (
     check_duplicate,
     check_duplicates_batch,
     export_csv,
+    complete_first_login,
     QSL_STATUSES,
 )
 from app.adif_parser import parse_adif, export_adif
+from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.post("/login")
 async def login(request: Request):
+    # 登录频率限制
+    ip = get_client_ip(request)
+    allowed, retry_after = check_rate_limit(ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"登录失败次数过多，请 {retry_after} 秒后再试",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     body = await request.json()
     username = body.get("username", "")
     password = body.get("password", "")
     if not username or not password:
         raise HTTPException(status_code=400, detail="请输入用户名和密码")
+
     user = get_user(username)
-    if not user or not verify_password(password, user["password_hash"]):
+    if not user:
+        record_failure(ip)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    is_valid, needs_upgrade = verify_password(password, user["password_hash"])
+    if not is_valid:
+        record_failure(ip)
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    # 登录成功
+    clear_attempts(ip)
+    # 自动升级旧 SHA-256 哈希到 bcrypt
+    if needs_upgrade:
+        new_hash = hash_password(password)
+        update_password(username, new_hash)
     request.session["username"] = username
-    return {"ok": True}
+    return {"ok": True, "first_login": bool(user.get("first_login", 0))}
 
 
 @router.post("/logout")
@@ -44,7 +71,10 @@ def logout(request: Request):
 
 @router.get("/check")
 def check_login(request: Request):
-    return {"logged_in": check_admin(request)}
+    if not check_admin(request):
+        return {"logged_in": False}
+    user = get_user(request.session["username"])
+    return {"logged_in": True, "first_login": bool(user.get("first_login", 0)) if user else False}
 
 
 @router.post("/change-password")
@@ -57,13 +87,66 @@ async def change_password(request: Request):
         raise HTTPException(status_code=400, detail="请输入旧密码和新密码")
     username = request.session["username"]
     user = get_user(username)
-    if not verify_password(old_password, user["password_hash"]):
+    is_valid, _ = verify_password(old_password, user["password_hash"])
+    if not is_valid:
         raise HTTPException(status_code=400, detail="旧密码错误")
     valid, msg = validate_password_strength(new_password)
     if not valid:
         raise HTTPException(status_code=400, detail=msg)
-    new_hash, _ = hash_password(new_password)
+    new_hash = hash_password(new_password)
     update_password(username, new_hash)
+    return {"ok": True}
+
+
+@router.get("/first-login-status")
+def first_login_status(request: Request):
+    require_admin(request)
+    user = get_user(request.session["username"])
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return {"first_login": bool(user.get("first_login", 0))}
+
+
+@router.post("/complete-first-login")
+async def complete_first_login_endpoint(request: Request):
+    require_admin(request)
+    body = await request.json()
+    old_password = body.get("old_password", "")
+    new_username = body.get("new_username", "").strip()
+    new_password = body.get("new_password", "")
+    confirm_username = body.get("confirm_username", "").strip()
+    confirm_password = body.get("confirm_password", "")
+
+    username = request.session["username"]
+    user = get_user(username)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+
+    # 验证旧密码
+    is_valid, _ = verify_password(old_password, user["password_hash"])
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="当前密码错误")
+
+    # 校验新用户名
+    if len(new_username) < 5:
+        raise HTTPException(status_code=400, detail="用户名长度至少为 5 个字符")
+    if new_username != confirm_username:
+        raise HTTPException(status_code=400, detail="两次输入的用户名不一致")
+
+    # 校验新密码
+    valid, msg = validate_password_strength(new_password)
+    if not valid:
+        raise HTTPException(status_code=400, detail=msg)
+    if new_password != confirm_password:
+        raise HTTPException(status_code=400, detail="两次输入的密码不一致")
+
+    # 更新
+    new_hash = hash_password(new_password)
+    if not complete_first_login(username, new_username, new_hash):
+        raise HTTPException(status_code=400, detail="新用户名已被占用")
+
+    # 更新 session
+    request.session["username"] = new_username
     return {"ok": True}
 
 
@@ -211,3 +294,52 @@ def export_csv_file(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ===== 数据库备份与恢复 =====
+
+@router.post("/backup")
+def backup_database(request: Request):
+    require_admin(request)
+    result = create_backup()
+    return {"ok": True, "backup": result}
+
+
+@router.get("/backups")
+def backup_list(request: Request):
+    require_admin(request)
+    return {"backups": list_backups()}
+
+
+@router.get("/backups/{filename}")
+def download_backup(filename: str, request: Request):
+    require_admin(request)
+    path = get_backup_path(filename)
+    if not path:
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+    return FileResponse(
+        path=path,
+        filename=filename,
+        media_type="application/octet-stream",
+    )
+
+
+@router.delete("/backups/{filename}")
+def remove_backup(filename: str, request: Request):
+    require_admin(request)
+    if not delete_backup(filename):
+        raise HTTPException(status_code=404, detail="备份文件不存在")
+    return {"ok": True}
+
+
+@router.post("/restore")
+async def restore_database(request: Request):
+    require_admin(request)
+    body = await request.json()
+    filename = body.get("filename", "")
+    if not filename:
+        raise HTTPException(status_code=400, detail="请指定备份文件名")
+    result = restore_backup(filename)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=result["detail"])
+    return result
