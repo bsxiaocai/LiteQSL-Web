@@ -17,7 +17,10 @@ from app.database import (
     check_duplicates_batch,
     export_csv,
     complete_first_login,
+    freq_to_band,
     QSL_STATUSES,
+    QSO_TYPES,
+    QSO_TYPE_LABELS,
 )
 from app.adif_parser import parse_adif, export_adif
 from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
@@ -155,6 +158,14 @@ def get_statuses():
     return {"statuses": QSL_STATUSES}
 
 
+@router.get("/qso-types")
+def get_qso_types():
+    """返回 QSO 类型列表（英文枚举 + 中文标签）"""
+    return {
+        "types": [{"value": t, "label": QSO_TYPE_LABELS.get(t, t)} for t in QSO_TYPES]
+    }
+
+
 @router.post("/logs")
 async def add_log(request: Request):
     require_admin(request)
@@ -163,16 +174,32 @@ async def add_log(request: Request):
     for field in required_fields:
         if not data.get(field):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
-    if not data.get("band"):
-        raise HTTPException(status_code=400, detail="波段和频率至少填写一项")
+
+    # 频率/波段校验：至少填写一项（freq 或 band）
+    # 数据库层会自动 freq → band 推导
+    if not data.get("freq") and not data.get("band"):
+        raise HTTPException(status_code=400, detail="频率和波段至少填写一项")
+
+    # 设置默认 qso_type
+    if not data.get("qso_type"):
+        data["qso_type"] = "NORMAL"
+
+    # 自动推导 band（如果只有 freq 没有 band）
+    if data.get("freq") and not data.get("band"):
+        auto_band = freq_to_band(data["freq"])
+        if auto_band:
+            data["band"] = auto_band
+
     # 重复检测（force=true 时跳过）
     if not data.get("force"):
-        existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data["mode"])
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data['mode']} 的记录 (ID: {existing['id']})",
-            )
+        # 需要 band 来做重复检测
+        if data.get("band"):
+            existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data["mode"])
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data['mode']} 的记录 (ID: {existing['id']})",
+                )
     log_id = insert_log(data)
     return {"ok": True, "id": log_id}
 
@@ -215,6 +242,7 @@ def list_all_logs(
     band: str = Query(None),
     mode: str = Query(None),
     qsl_status: str = Query(None),
+    qso_type: str = Query(None),
 ):
     require_admin(request)
     filters = {}
@@ -226,6 +254,8 @@ def list_all_logs(
         filters["mode"] = mode
     if qsl_status:
         filters["qsl_status"] = qsl_status
+    if qso_type:
+        filters["qso_type"] = qso_type
     return get_logs_paginated(filters, page, page_size)
 
 
@@ -274,6 +304,7 @@ def export_csv_file(
     band: str = Query(None),
     mode: str = Query(None),
     qsl_status: str = Query(None),
+    qso_type: str = Query(None),
 ):
     require_admin(request)
     filters = {}
@@ -283,6 +314,8 @@ def export_csv_file(
         filters["mode"] = mode
     if qsl_status:
         filters["qsl_status"] = qsl_status
+    if qso_type:
+        filters["qso_type"] = qso_type
     if filters:
         records = get_logs_paginated(filters, page=1, page_size=99999)["logs"]
     else:

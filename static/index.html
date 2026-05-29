@@ -37,9 +37,9 @@
                                 <th class="px-4 py-2">呼号</th>
                                 <th class="px-4 py-2">日期</th>
                                 <th class="px-4 py-2">时间</th>
-                                <th class="px-4 py-2">波段</th>
                                 <th class="px-4 py-2">频率</th>
                                 <th class="px-4 py-2">模式</th>
+                                <th class="px-4 py-2">类型</th>
                                 <th class="px-4 py-2">RST发送</th>
                                 <th class="px-4 py-2">RST接收</th>
                                 <th class="px-4 py-2">卡片状态</th>
@@ -82,6 +82,15 @@
                         <option>SSTV</option><option>DIGITAL</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">类型</label>
+                    <select id="filterQsoType" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="">全部</option>
+                        <option value="NORMAL">一般通联</option>
+                        <option value="SAT">卫星通联 🛰</option>
+                        <option value="REP">中继通联 📡</option>
+                    </select>
+                </div>
                 <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm">筛选</button>
                 <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm">清除</button>
             </div>
@@ -92,9 +101,9 @@
                             <th class="px-4 py-2">呼号</th>
                             <th class="px-4 py-2">日期</th>
                             <th class="px-4 py-2">时间</th>
-                            <th class="px-4 py-2">波段</th>
                             <th class="px-4 py-2">频率</th>
                             <th class="px-4 py-2">模式</th>
+                            <th class="px-4 py-2">类型</th>
                             <th class="px-4 py-2">RST发送</th>
                             <th class="px-4 py-2">RST接收</th>
                             <th class="px-4 py-2">卡片状态</th>
@@ -119,6 +128,17 @@
     </footer>
 
     <script>
+        // ===== 常量定义 =====
+        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联' };
+        const QSO_TYPE_ICONS = { 'NORMAL': '', 'SAT': '🛰', 'REP': '📡' };
+        const BAND_FREQ = {
+            '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
+            '40m': '7.000-7.300', '30m': '10.100-10.150', '20m': '14.000-14.350',
+            '17m': '18.068-18.168', '15m': '21.000-21.450', '12m': '24.890-24.990',
+            '10m': '28.000-29.700', '6m': '50.000-54.000', '2m': '144.000-148.000',
+            '70cm': '430.000-440.000', '23cm': '1240.000-1300.000'
+        };
+
         // ===== Toast 通知系统 =====
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
@@ -137,18 +157,71 @@
             setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 3500);
         }
 
-        const BAND_FREQ = {
-            '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
-            '40m': '7.000-7.300', '30m': '10.100-10.150', '20m': '14.000-14.350',
-            '17m': '18.068-18.168', '15m': '21.000-21.450', '12m': '24.890-24.990',
-            '10m': '28.000-29.700', '6m': '50.000-54.000', '2m': '144.000-148.000',
-            '70cm': '430.000-440.000', '23cm': '1240.000-1300.000'
-        };
-        function bandFreq(band) { return band ? (BAND_FREQ[band] || band) + ' MHz' : '-'; }
-
         function statusColor(s) {
             const map = { '已发送': 'bg-green-100 text-green-800', '未发送': 'bg-yellow-100 text-yellow-800', '电子确认': 'bg-blue-100 text-blue-800', '无需发送': 'bg-gray-100 text-gray-600', '无法考证': 'bg-red-100 text-red-800' };
             return map[s] || 'bg-gray-100 text-gray-600';
+        }
+
+        // 格式化频率显示
+        function formatFreqDisplay(log) {
+            if (log.freq) return log.freq + ' MHz';
+            if (log.band && BAND_FREQ[log.band]) return BAND_FREQ[log.band] + ' MHz';
+            return log.band || '-';
+        }
+
+        // 格式化类型标签
+        function formatTypeBadge(qsoType) {
+            const type = qsoType || 'NORMAL';
+            const label = QSO_TYPE_LABELS[type] || '一般通联';
+            const icon = QSO_TYPE_ICONS[type] || '';
+            if (type === 'SAT') {
+                return `<span class="px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-700">${icon} ${label}</span>`;
+            } else if (type === 'REP') {
+                return `<span class="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">${icon} ${label}</span>`;
+            }
+            // NORMAL 不显示标签，保持简洁
+            return '';
+        }
+
+        // 格式化频率单元格（考虑 QSO 类型）
+        function formatFreqCell(log) {
+            const qsoType = log.qso_type || 'NORMAL';
+
+            if (qsoType === 'SAT') {
+                // 卫星通联：显示上下行频率
+                let html = '';
+                if (log.sat_name) {
+                    html += `<div class="text-purple-600 text-xs font-medium mb-1">🛰 ${log.sat_name}</div>`;
+                }
+                if (log.tx_freq && log.rx_freq) {
+                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                } else if (log.freq) {
+                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                } else if (log.band) {
+                    html += `<div class="text-xs">${log.band}</div>`;
+                } else {
+                    html = '-';
+                }
+                return html;
+            } else if (qsoType === 'REP') {
+                // 中继通联：显示输入输出频率
+                let html = '';
+                if (log.tx_freq && log.rx_freq) {
+                    const diff = (parseFloat(log.rx_freq) - parseFloat(log.tx_freq)).toFixed(1);
+                    const sign = diff >= 0 ? '+' : '';
+                    html += `<div class="text-xs">${log.rx_freq} (${sign}${diff}MHz)</div>`;
+                } else if (log.freq) {
+                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                } else if (log.band) {
+                    html += `<div class="text-xs">${log.band}</div>`;
+                } else {
+                    html = '-';
+                }
+                return html;
+            }
+
+            // 一般通联：显示频率
+            return `<span>${formatFreqDisplay(log)}</span>`;
         }
 
         function rowHtml(log) {
@@ -156,9 +229,9 @@
                 <td class="px-4 py-2 font-medium">${log.call}</td>
                 <td class="px-4 py-2">${log.qso_date || '-'}</td>
                 <td class="px-4 py-2">${log.time_on || '-'}</td>
-                <td class="px-4 py-2">${log.band || '-'}</td>
-                <td class="px-4 py-2 text-gray-600">${bandFreq(log.band)}</td>
+                <td class="px-4 py-2 text-gray-600">${formatFreqCell(log)}</td>
                 <td class="px-4 py-2">${log.mode || '-'}</td>
+                <td class="px-4 py-2">${formatTypeBadge(log.qso_type)}</td>
                 <td class="px-4 py-2">${log.rst_sent || '-'}</td>
                 <td class="px-4 py-2">${log.rst_rcvd || '-'}</td>
                 <td class="px-4 py-2"><span class="px-2 py-1 rounded-full text-xs ${statusColor(log.qsl_status)}">${log.qsl_status}</span></td>
@@ -166,7 +239,7 @@
         }
 
         // ===== 分页状态 =====
-        let recentPage = 1, searchPage = 1, lastSearchCall = '', lastRecentBand = '', lastRecentMode = '';
+        let recentPage = 1, searchPage = 1, lastSearchCall = '', lastRecentBand = '', lastRecentMode = '', lastRecentQsoType = '';
 
         // ===== 通用分页渲染 =====
         function renderPagination(containerId, infoId, data, goFn) {
@@ -189,10 +262,13 @@
         }
 
         // ===== 分页加载最近通联 =====
-        function loadRecent(band, mode, page) {
-            page = page || 1; recentPage = page; lastRecentBand = band || ''; lastRecentMode = mode || '';
+        function loadRecent(band, mode, qsoType, page) {
+            page = page || 1; recentPage = page;
+            lastRecentBand = band || ''; lastRecentMode = mode || ''; lastRecentQsoType = qsoType || '';
             const params = new URLSearchParams();
-            if (band) params.set('band', band); if (mode) params.set('mode', mode);
+            if (band) params.set('band', band);
+            if (mode) params.set('mode', mode);
+            if (qsoType) params.set('qso_type', qsoType);
             params.set('page', page); params.set('page_size', 20);
             fetch(`/api/recent?${params}`).then(r => r.json()).then(data => {
                 const tbody = document.getElementById('recentTableBody');
@@ -203,7 +279,7 @@
                 renderPagination('recentPagination', 'recentPaginationInfo', data, 'goRecentPage');
             }).catch(() => { document.getElementById('noRecentData').classList.remove('hidden'); });
         }
-        function goRecentPage(page) { loadRecent(lastRecentBand, lastRecentMode, page); }
+        function goRecentPage(page) { loadRecent(lastRecentBand, lastRecentMode, lastRecentQsoType, page); }
 
         // ===== 分页搜索 =====
         function loadSearch(call, page) {
@@ -230,11 +306,18 @@
 
         // ===== 筛选控件事件 =====
         document.getElementById('filterApply').addEventListener('click', function() {
-            loadRecent(document.getElementById('filterBand').value, document.getElementById('filterMode').value, 1);
+            loadRecent(
+                document.getElementById('filterBand').value,
+                document.getElementById('filterMode').value,
+                document.getElementById('filterQsoType').value,
+                1
+            );
         });
         document.getElementById('filterClear').addEventListener('click', function() {
-            document.getElementById('filterBand').value = ''; document.getElementById('filterMode').value = '';
-            loadRecent('', '', 1);
+            document.getElementById('filterBand').value = '';
+            document.getElementById('filterMode').value = '';
+            document.getElementById('filterQsoType').value = '';
+            loadRecent('', '', '', 1);
         });
 
         // ===== 搜索 =====

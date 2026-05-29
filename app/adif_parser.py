@@ -1,14 +1,21 @@
 import re
 from datetime import datetime
+from app.database import freq_to_band
 
 
 def parse_adif(content: str) -> list[dict]:
-    """Parse ADIF content string into a list of QSO record dicts."""
+    """Parse ADIF content string into a list of QSO record dicts.
+
+    支持的 ADIF 字段：
+    - 标准字段：CALL, QSO_DATE, TIME_ON, BAND, MODE, RST_SENT, RST_RCVD, QSL_STATUS, COMMENT/NOTES
+    - 频率字段：FREQ（主频率 MHz）, FREQ_RX（接收频率 MHz）
+    - 卫星字段：TX_FREQ, RX_FREQ, SAT_NAME, PROP_MODE
+    """
     records = []
-    content = content.upper()
+    content_upper = content.upper()
 
     # Split by <eor> or <EOR>
-    parts = re.split(r"<EOR>", content)
+    parts = re.split(r"<EOR>", content_upper)
 
     for part in parts:
         record = {}
@@ -30,7 +37,7 @@ def parse_adif(content: str) -> list[dict]:
             elif tag_lower == "time_on":
                 record["time_on"] = value[:6] if len(value) >= 6 else value
             elif tag_lower == "band":
-                record["band"] = value
+                record["band"] = value.lower() if value else ""
             elif tag_lower == "mode":
                 record["mode"] = value
             elif tag_lower == "rst_sent":
@@ -41,6 +48,22 @@ def parse_adif(content: str) -> list[dict]:
                 record["qsl_status"] = value
             elif tag_lower == "comment" or tag_lower == "notes":
                 record["comment"] = value
+            # ===== 频率字段 =====
+            elif tag_lower == "freq":
+                # ADIF FREQ 单位是 kHz（如 "14270"），转换为 MHz（如 "14.270"）
+                record["freq"] = _khz_to_mhz(value)
+            elif tag_lower == "freq_rx":
+                # 接收频率（用于跨段通联），同样 kHz → MHz
+                record["rx_freq"] = _khz_to_mhz(value)
+            # ===== 卫星/中继双频字段 =====
+            elif tag_lower == "tx_freq":
+                record["tx_freq"] = _khz_to_mhz(value)
+            elif tag_lower == "rx_freq":
+                record["rx_freq"] = _khz_to_mhz(value)
+            elif tag_lower == "sat_name":
+                record["sat_name"] = value
+            elif tag_lower == "prop_mode":
+                record["_prop_mode"] = value  # 暂存，用于推导 qso_type
 
         if record.get("call"):
             record.setdefault("qso_date", "")
@@ -51,38 +74,136 @@ def parse_adif(content: str) -> list[dict]:
             record.setdefault("rst_rcvd", "")
             record.setdefault("qsl_status", "未发送")
             record.setdefault("comment", "")
+            record.setdefault("freq", "")
+            record.setdefault("tx_freq", "")
+            record.setdefault("rx_freq", "")
+            record.setdefault("sat_name", "")
+
+            # ===== 自动推导 qso_type =====
+            prop_mode = record.pop("_prop_mode", "")
+            if not record.get("qso_type"):
+                if prop_mode == "SAT" or record.get("sat_name"):
+                    record["qso_type"] = "SAT"
+                elif prop_mode == "RPT" or record.get("tx_freq") and record.get("rx_freq"):
+                    record["qso_type"] = "REP"
+                else:
+                    record["qso_type"] = "NORMAL"
+
+            # ===== 自动补全：freq → band =====
+            if record.get("freq") and not record.get("band"):
+                auto_band = freq_to_band(record["freq"])
+                if auto_band:
+                    record["band"] = auto_band
+
+            # ===== SAT 类型：如果只有 freq 没有 tx/rx，默认 freq → tx_freq =====
+            if record.get("qso_type") == "SAT" and record.get("freq") and not record.get("tx_freq"):
+                record["tx_freq"] = record["freq"]
+
             records.append(record)
 
     return records
 
 
+def _khz_to_mhz(value: str) -> str:
+    """将 ADIF 频率值（kHz 或 MHz 字符串）统一转为 MHz 字符串。
+
+    ADIF 规范中 FREQ 单位为 kHz（如 "14270"），但部分软件导出为 MHz（如 "14.270"）。
+    自动判断：如果值 > 1000 且不含小数点，视为 kHz 并转换。
+    """
+    if not value:
+        return ""
+    try:
+        f = float(value)
+    except (ValueError, TypeError):
+        return ""
+    # 如果值大于 1000 且不含小数点（或小数部分很小），视为 kHz
+    if f > 1000 and "." not in value:
+        return f"{f / 1000:.3f}"
+    return value
+
+
 def export_adif(records: list[dict]) -> str:
-    """Export a list of QSO record dicts to ADIF format string."""
+    """Export a list of QSO record dicts to ADIF format string.
+
+    导出字段包括：
+    - 标准字段：CALL, QSO_DATE, TIME_ON, BAND, MODE, RST_SENT, RST_RCVD, QSL_STATUS, COMMENT
+    - 频率字段：FREQ（MHz → kHz 转换）
+    - 卫星字段：TX_FREQ, RX_FREQ, SAT_NAME, PROP_MODE, FREQ_RX
+    """
     lines = []
     lines.append("ADIF Export from LiteQSL-Web")
     lines.append(f"Generated: {datetime.now().strftime('%Y%m%d %H%M%S')}")
     lines.append("<EOH>")
     lines.append("")
 
-    field_map = {
-        "call": "CALL",
-        "qso_date": "QSO_DATE",
-        "time_on": "TIME_ON",
-        "band": "BAND",
-        "mode": "MODE",
-        "rst_sent": "RST_SENT",
-        "rst_rcvd": "RST_RCVD",
-        "qsl_status": "QSL_STATUS",
-        "comment": "COMMENT",
-    }
-
     for rec in records:
         parts = []
-        for key, adif_tag in field_map.items():
-            val = rec.get(key, "")
-            if val:
-                parts.append(f"<{adif_tag}:{len(val)}>{val}")
+        qso_type = rec.get("qso_type", "NORMAL")
+
+        # ===== 标准字段 =====
+        _append_adif_field(parts, "CALL", rec.get("call", ""))
+        _append_adif_field(parts, "QSO_DATE", rec.get("qso_date", ""))
+        _append_adif_field(parts, "TIME_ON", rec.get("time_on", ""))
+        _append_adif_field(parts, "BAND", rec.get("band", ""))
+        _append_adif_field(parts, "MODE", rec.get("mode", ""))
+        _append_adif_field(parts, "RST_SENT", rec.get("rst_sent", ""))
+        _append_adif_field(parts, "RST_RCVD", rec.get("rst_rcvd", ""))
+        _append_adif_field(parts, "QSL_STATUS", rec.get("qsl_status", ""))
+        _append_adif_field(parts, "COMMENT", rec.get("comment", ""))
+
+        # ===== 频率字段（MHz → kHz 转换） =====
+        freq_mhz = rec.get("freq", "")
+        if freq_mhz:
+            freq_khz = _mhz_to_khz(freq_mhz)
+            if freq_khz:
+                _append_adif_field(parts, "FREQ", freq_khz)
+
+        # ===== 卫星/中继特殊字段 =====
+        if qso_type == "SAT":
+            _append_adif_field(parts, "PROP_MODE", "SAT")
+            if rec.get("sat_name"):
+                _append_adif_field(parts, "SAT_NAME", rec["sat_name"])
+            tx = rec.get("tx_freq", "")
+            rx = rec.get("rx_freq", "")
+            if tx:
+                _append_adif_field(parts, "TX_FREQ", _mhz_to_khz(tx) or tx)
+            if rx:
+                _append_adif_field(parts, "RX_FREQ", _mhz_to_khz(rx) or rx)
+                _append_adif_field(parts, "FREQ_RX", _mhz_to_khz(rx) or rx)
+        elif qso_type == "REP":
+            tx = rec.get("tx_freq", "")
+            rx = rec.get("rx_freq", "")
+            if tx:
+                _append_adif_field(parts, "TX_FREQ", _mhz_to_khz(tx) or tx)
+            if rx:
+                _append_adif_field(parts, "RX_FREQ", _mhz_to_khz(rx) or rx)
+                _append_adif_field(parts, "FREQ_RX", _mhz_to_khz(rx) or rx)
+
         parts.append("<EOR>")
         lines.append(" ".join(parts))
 
     return "\n".join(lines)
+
+
+def _append_adif_field(parts: list, tag: str, value: str):
+    """向 ADIF 输出追加一个字段（仅当值非空时）"""
+    if value:
+        parts.append(f"<{tag}:{len(value)}>{value}")
+
+
+def _mhz_to_khz(value: str) -> str:
+    """将 MHz 字符串转为 kHz 字符串（整数或保留适当精度）。
+
+    例如："14.270" → "14270", "7.074" → "7074", "145.825" → "145825"
+    """
+    if not value:
+        return ""
+    try:
+        f = float(value)
+    except (ValueError, TypeError):
+        return ""
+    khz = f * 1000
+    # 如果是整数，去掉小数部分
+    if khz == int(khz):
+        return str(int(khz))
+    return str(khz)

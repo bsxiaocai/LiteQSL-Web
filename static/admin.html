@@ -49,80 +49,113 @@
         </header>
 
         <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
-            <!-- Manual Entry -->
+            <!-- ===== 手动录入 QSO ===== -->
             <section class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">手动录入 QSO</h2>
-                <form id="addForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">呼号 *</label>
-                        <input type="text" name="call" required placeholder="BH7GUL"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                <form id="addForm" class="space-y-4">
+                    <!-- 第一行：基础信息 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">呼号 *</label>
+                            <input type="text" name="call" required placeholder="BH7GUL"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">日期 (YYYYMMDD)</label>
+                            <input type="text" name="qso_date" placeholder="20260528"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">时间 (HHMMSS)</label>
+                            <input type="text" name="time_on" placeholder="143025"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">QSO 类型</label>
+                            <select id="qsoTypeSelect" name="qso_type"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="NORMAL">一般通联</option>
+                                <option value="SAT">卫星通联 🛰</option>
+                                <option value="REP">中继通联 📡</option>
+                            </select>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">日期 (YYYYMMDD)</label>
-                        <input type="text" name="qso_date" placeholder="20260528"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+
+                    <!-- 第二行：频率与模式 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">频率 (MHz) *</label>
+                            <input type="text" id="freqInput" name="freq" placeholder="如 14.270"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <p id="freqBandHint" class="text-xs text-gray-400 mt-1"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">模式</label>
+                            <select name="mode"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">--</option>
+                                <option>SSB</option><option>CW</option><option>FT8</option>
+                                <option>FT4</option><option>FM</option><option>AM</option>
+                                <option>PSK31</option><option>RTTY</option><option>JS8</option>
+                                <option>SSTV</option><option>DIGITAL</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
+                            <input type="text" name="rst_sent" placeholder="59"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
+                            <input type="text" name="rst_rcvd" placeholder="59"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">时间 (HHMMSS)</label>
-                        <input type="text" name="time_on" placeholder="143025"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+
+                    <!-- 卫星/中继专用字段（默认隐藏） -->
+                    <div id="satRepFields" class="hidden">
+                        <div class="border-t pt-4 mt-2">
+                            <h3 id="satRepTitle" class="text-sm font-medium text-gray-700 mb-3">卫星 / 中继信息</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div id="satNameGroup">
+                                    <label class="block text-sm text-gray-600 mb-1">卫星名称</label>
+                                    <input type="text" id="satNameInput" name="sat_name" placeholder="如 SO-50"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label id="txFreqLabel" class="block text-sm text-gray-600 mb-1">上行频率 (MHz)</label>
+                                    <input type="text" id="txFreqInput" name="tx_freq" placeholder="如 145.850"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label id="rxFreqLabel" class="block text-sm text-gray-600 mb-1">下行频率 (MHz)</label>
+                                    <input type="text" id="rxFreqInput" name="rx_freq" placeholder="如 436.795"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">波段</label>
-                        <select id="bandSelect" name="band"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="">--</option>
-                            <option>160m</option><option>80m</option><option>60m</option>
-                            <option>40m</option><option>30m</option><option>20m</option>
-                            <option>17m</option><option>15m</option><option>12m</option>
-                            <option>10m</option><option>6m</option><option>2m</option>
-                            <option>70cm</option><option>23cm</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">频率 (MHz)</label>
-                        <input type="text" id="freqInput" placeholder="如 14.1"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">模式</label>
-                        <select name="mode"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="">--</option>
-                            <option>SSB</option><option>CW</option><option>FT8</option>
-                            <option>FT4</option><option>FM</option><option>AM</option>
-                            <option>PSK31</option><option>RTTY</option><option>JS8</option>
-                            <option>SSTV</option><option>DIGITAL</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
-                        <input type="text" name="rst_sent" placeholder="59"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
-                        <input type="text" name="rst_rcvd" placeholder="59"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-sm text-gray-600 mb-1">卡片状态</label>
-                        <select name="qsl_status"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option>未发送</option><option>已发送</option>
-                            <option>无需发送</option><option>电子确认</option>
-                            <option>无法考证</option>
-                        </select>
-                    </div>
-                    <div class="md:col-span-2 lg:col-span-3">
-                        <label class="block text-sm text-gray-600 mb-1">备注</label>
-                        <input type="text" name="comment"
-                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    </div>
-                    <div class="flex items-end">
-                        <button type="submit"
-                            class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition min-h-[44px]">添加记录</button>
+
+                    <!-- 第三行：状态、备注、提交 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">卡片状态</label>
+                            <select name="qsl_status"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option>未发送</option><option>已发送</option>
+                                <option>无需发送</option><option>电子确认</option>
+                                <option>无法考证</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-sm text-gray-600 mb-1">备注</label>
+                            <input type="text" name="comment"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit"
+                                class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition min-h-[44px]">添加记录</button>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -206,6 +239,15 @@
                             <option>无法考证</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-xs text-gray-500 mb-1">QSO 类型</label>
+                        <select id="filterQsoType" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">全部</option>
+                            <option value="NORMAL">一般通联</option>
+                            <option value="SAT">卫星通联</option>
+                            <option value="REP">中继通联</option>
+                        </select>
+                    </div>
                     <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm min-h-[44px]">筛选</button>
                     <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm min-h-[44px]">清除</button>
                 </div>
@@ -217,9 +259,9 @@
                                 <th class="px-3 py-2">呼号</th>
                                 <th class="px-3 py-2">日期</th>
                                 <th class="px-3 py-2">时间</th>
-                                <th class="px-3 py-2">波段</th>
-                                <th class="px-3 py-2">频率</th>
+                                <th class="px-3 py-2">频率/波段</th>
                                 <th class="px-3 py-2">模式</th>
+                                <th class="px-3 py-2">类型</th>
                                 <th class="px-3 py-2">RST</th>
                                 <th class="px-3 py-2">卡片状态</th>
                                 <th class="px-3 py-2">操作</th>
@@ -288,7 +330,7 @@
 
     <!-- 编辑记录弹窗 -->
     <div id="editModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg mx-2 sm:mx-0">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto">
             <h2 class="text-lg font-semibold text-gray-800 mb-4">编辑记录</h2>
             <form id="editForm">
                 <input type="hidden" id="editId">
@@ -309,21 +351,19 @@
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     </div>
                     <div>
-                        <label class="block text-sm text-gray-600 mb-1">波段</label>
-                        <select id="editBand"
+                        <label class="block text-sm text-gray-600 mb-1">QSO 类型</label>
+                        <select id="editQsoType"
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option value="">--</option>
-                            <option>160m</option><option>80m</option><option>60m</option>
-                            <option>40m</option><option>30m</option><option>20m</option>
-                            <option>17m</option><option>15m</option><option>12m</option>
-                            <option>10m</option><option>6m</option><option>2m</option>
-                            <option>70cm</option><option>23cm</option>
+                            <option value="NORMAL">一般通联</option>
+                            <option value="SAT">卫星通联 🛰</option>
+                            <option value="REP">中继通联 📡</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">频率 (MHz)</label>
                         <input type="text" id="editFreq"
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <p id="editFreqBandHint" class="text-xs text-gray-400 mt-1"></p>
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">模式</label>
@@ -359,6 +399,29 @@
                         <label class="block text-sm text-gray-600 mb-1">备注</label>
                         <input type="text" id="editComment"
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+                </div>
+                <!-- 卫星/中继专用字段（编辑弹窗） -->
+                <div id="editSatRepFields" class="hidden mb-4">
+                    <div class="border-t pt-4">
+                        <h3 id="editSatRepTitle" class="text-sm font-medium text-gray-700 mb-3">卫星 / 中继信息</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div id="editSatNameGroup">
+                                <label class="block text-sm text-gray-600 mb-1">卫星名称</label>
+                                <input type="text" id="editSatName"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label id="editTxFreqLabel" class="block text-sm text-gray-600 mb-1">上行频率 (MHz)</label>
+                                <input type="text" id="editTxFreq"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label id="editRxFreqLabel" class="block text-sm text-gray-600 mb-1">下行频率 (MHz)</label>
+                                <input type="text" id="editRxFreq"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <p id="editError" class="text-red-500 text-sm mb-3 hidden"></p>
@@ -412,6 +475,18 @@
     </div>
 
     <script>
+        // ===== 常量定义 =====
+        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联' };
+        const QSO_TYPE_ICONS = { 'NORMAL': '', 'SAT': '🛰', 'REP': '📡' };
+        const STATUS_OPTIONS = ['无法考证', '未发送', '已发送', '无需发送', '电子确认'];
+        const BAND_FREQ = {
+            '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
+            '40m': '7.000-7.300', '30m': '10.100-10.150', '20m': '14.000-14.350',
+            '17m': '18.068-18.168', '15m': '21.000-21.450', '12m': '24.890-24.990',
+            '10m': '28.000-29.700', '6m': '50.000-54.000', '2m': '144.000-148.000',
+            '70cm': '430.000-440.000', '23cm': '1240.000-1300.000'
+        };
+
         // ===== Toast 通知系统 =====
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
@@ -442,32 +517,7 @@
             }
         }
 
-        // ===== 实时校验系统 =====
-        function validateField(inputEl, validatorFns) {
-            const value = inputEl.value.trim();
-            let error = '';
-            for (const fn of validatorFns) { error = fn(value); if (error) break; }
-            let errEl = inputEl.parentElement.querySelector('.field-error');
-            if (!errEl) { errEl = document.createElement('p'); errEl.className = 'field-error text-red-500 text-xs mt-1 hidden'; inputEl.parentElement.appendChild(errEl); }
-            if (error) { errEl.textContent = error; errEl.classList.remove('hidden'); inputEl.classList.add('border-red-500'); inputEl.classList.remove('border-gray-300'); return false; }
-            else { errEl.classList.add('hidden'); inputEl.classList.remove('border-red-500'); inputEl.classList.add('border-gray-300'); return true; }
-        }
-        const validators = {
-            date: (v) => { if (!v) return ''; if (!/^\d{8}$/.test(v)) return '日期必须为8位数字 (YYYYMMDD)'; const m = parseInt(v.substring(4,6),10), d = parseInt(v.substring(6,8),10); if (m<1||m>12) return '月份必须在 01-12 之间'; if (d<1||d>31) return '日期必须在 01-31 之间'; return ''; },
-            time: (v) => { if (!v) return ''; if (!/^\d{6}$/.test(v)) return '时间必须为6位数字 (HHMMSS)'; const h=parseInt(v.substring(0,2),10), m=parseInt(v.substring(2,4),10), s=parseInt(v.substring(4,6),10); if (h>23) return '小时必须在 00-23 之间'; if (m>59) return '分钟必须在 00-59 之间'; if (s>59) return '秒必须在 00-59 之间'; return ''; },
-            rst: (mode) => (v) => { if (!v) return ''; if (mode === 'CW') { if (!/^\d{3}$/.test(v)) return 'CW模式 RST必须为3位数字'; } else { if (!/^\d{2}$/.test(v)) return 'RST必须为2位数字 (如 59)'; } return ''; },
-        };
-
-        const STATUS_OPTIONS = ['无法考证', '未发送', '已发送', '无需发送', '电子确认'];
-        const BAND_FREQ = {
-            '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
-            '40m': '7.000-7.300', '30m': '10.100-10.150', '20m': '14.000-14.350',
-            '17m': '18.068-18.168', '15m': '21.000-21.450', '12m': '24.890-24.990',
-            '10m': '28.000-29.700', '6m': '50.000-54.000', '2m': '144.000-148.000',
-            '70cm': '430.000-440.000', '23cm': '1240.000-1300.000'
-        };
-        function bandFreq(band) { return band ? (BAND_FREQ[band] || band) + ' MHz' : '-'; }
-
+        // ===== 频率 → 波段自动识别 =====
         function freqToBand(freq) {
             const f = parseFloat(freq);
             if (isNaN(f)) return '';
@@ -488,23 +538,101 @@
             return '';
         }
 
-        // ===== 频率 <-> 波段联动（录入表单）=====
-        document.getElementById('freqInput').addEventListener('input', function() {
-            const band = freqToBand(this.value);
-            if (band) document.getElementById('bandSelect').value = band;
-        });
-        document.getElementById('bandSelect').addEventListener('change', function() {
-            if (this.value && BAND_FREQ[this.value]) document.getElementById('freqInput').value = BAND_FREQ[this.value].split('-')[0];
-        });
+        // 格式化频率显示：如果有 freq 字段显示 freq，否则显示 band 范围
+        function formatFreqDisplay(log) {
+            if (log.freq) return log.freq + ' MHz';
+            if (log.band && BAND_FREQ[log.band]) return BAND_FREQ[log.band] + ' MHz';
+            return log.band || '-';
+        }
 
-        // ===== 频率 <-> 波段联动（编辑弹窗）=====
-        document.getElementById('editFreq').addEventListener('input', function() {
-            const band = freqToBand(this.value);
-            if (band) document.getElementById('editBand').value = band;
-        });
-        document.getElementById('editBand').addEventListener('change', function() {
-            if (this.value && BAND_FREQ[this.value]) document.getElementById('editFreq').value = BAND_FREQ[this.value].split('-')[0];
-        });
+        // 格式化完整的频率/波段单元格（管理表格用）
+        function formatFreqBandCell(log) {
+            const freq = log.freq || '';
+            const band = log.band || '';
+            let html = '';
+            if (freq) {
+                html += `<span class="font-medium">${freq} MHz</span>`;
+            }
+            if (band) {
+                html += `<span class="text-gray-400 text-xs ml-1">${band}</span>`;
+            }
+            if (!freq && !band) {
+                html = '-';
+            }
+            return html;
+        }
+
+        // ===== QSO 类型切换：显示/隐藏卫星/中继字段 =====
+        function setupQsoTypeToggle(typeSelectId, fieldsContainerId, satNameGroupId, txFreqLabelId, rxFreqLabelId, titleId) {
+            const typeSelect = document.getElementById(typeSelectId);
+            const fieldsContainer = document.getElementById(fieldsContainerId);
+            const satNameGroup = document.getElementById(satNameGroupId);
+            const txFreqLabel = document.getElementById(txFreqLabelId);
+            const rxFreqLabel = document.getElementById(rxFreqLabelId);
+            const title = document.getElementById(titleId);
+
+            function updateFields() {
+                const qsoType = typeSelect.value;
+                if (qsoType === 'SAT') {
+                    fieldsContainer.classList.remove('hidden');
+                    satNameGroup.classList.remove('hidden');
+                    txFreqLabel.textContent = '上行频率 (MHz) ↑';
+                    rxFreqLabel.textContent = '下行频率 (MHz) ↓';
+                    title.textContent = '🛰 卫星通联信息';
+                } else if (qsoType === 'REP') {
+                    fieldsContainer.classList.remove('hidden');
+                    satNameGroup.classList.add('hidden');
+                    txFreqLabel.textContent = '输入频率 (MHz)';
+                    rxFreqLabel.textContent = '输出频率 (MHz)';
+                    title.textContent = '📡 中继通联信息';
+                } else {
+                    fieldsContainer.classList.add('hidden');
+                }
+            }
+            typeSelect.addEventListener('change', updateFields);
+            return updateFields;
+        }
+
+        // 初始化录入表单的类型切换
+        const updateAddFields = setupQsoTypeToggle('qsoTypeSelect', 'satRepFields', 'satNameGroup', 'txFreqLabel', 'rxFreqLabel', 'satRepTitle');
+        // 初始化编辑弹窗的类型切换
+        const updateEditFields = setupQsoTypeToggle('editQsoType', 'editSatRepFields', 'editSatNameGroup', 'editTxFreqLabel', 'editRxFreqLabel', 'editSatRepTitle');
+
+        // ===== 频率输入 → 自动显示波段提示 =====
+        function setupFreqHint(freqInputId, hintId) {
+            const freqInput = document.getElementById(freqInputId);
+            const hint = document.getElementById(hintId);
+            freqInput.addEventListener('input', function() {
+                const band = freqToBand(this.value);
+                if (band) {
+                    hint.textContent = `自动识别: ${band}`;
+                    hint.className = 'text-xs text-green-500 mt-1';
+                } else if (this.value.trim()) {
+                    hint.textContent = '不在已知业余频段内';
+                    hint.className = 'text-xs text-orange-400 mt-1';
+                } else {
+                    hint.textContent = '';
+                }
+            });
+        }
+        setupFreqHint('freqInput', 'freqBandHint');
+        setupFreqHint('editFreq', 'editFreqBandHint');
+
+        // ===== 实时校验系统 =====
+        function validateField(inputEl, validatorFns) {
+            const value = inputEl.value.trim();
+            let error = '';
+            for (const fn of validatorFns) { error = fn(value); if (error) break; }
+            let errEl = inputEl.parentElement.querySelector('.field-error');
+            if (!errEl) { errEl = document.createElement('p'); errEl.className = 'field-error text-red-500 text-xs mt-1 hidden'; inputEl.parentElement.appendChild(errEl); }
+            if (error) { errEl.textContent = error; errEl.classList.remove('hidden'); inputEl.classList.add('border-red-500'); inputEl.classList.remove('border-gray-300'); return false; }
+            else { errEl.classList.add('hidden'); inputEl.classList.remove('border-red-500'); inputEl.classList.add('border-gray-300'); return true; }
+        }
+        const validators = {
+            date: (v) => { if (!v) return ''; if (!/^\d{8}$/.test(v)) return '日期必须为8位数字 (YYYYMMDD)'; const m = parseInt(v.substring(4,6),10), d = parseInt(v.substring(6,8),10); if (m<1||m>12) return '月份必须在 01-12 之间'; if (d<1||d>31) return '日期必须在 01-31 之间'; return ''; },
+            time: (v) => { if (!v) return ''; if (!/^\d{6}$/.test(v)) return '时间必须为6位数字 (HHMMSS)'; const h=parseInt(v.substring(0,2),10), m=parseInt(v.substring(2,4),10), s=parseInt(v.substring(4,6),10); if (h>23) return '小时必须在 00-23 之间'; if (m>59) return '分钟必须在 00-59 之间'; if (s>59) return '秒必须在 00-59 之间'; return ''; },
+            rst: (mode) => (v) => { if (!v) return ''; if (mode === 'CW') { if (!/^\d{3}$/.test(v)) return 'CW模式 RST必须为3位数字'; } else { if (!/^\d{2}$/.test(v)) return 'RST必须为2位数字 (如 59)'; } return ''; },
+        };
 
         // ===== 录入表单 blur 校验 =====
         const addFormEl = document.getElementById('addForm');
@@ -653,6 +781,7 @@
             if (currentFilters.band) params.set('band', currentFilters.band);
             if (currentFilters.mode) params.set('mode', currentFilters.mode);
             if (currentFilters.qsl_status) params.set('qsl_status', currentFilters.qsl_status);
+            if (currentFilters.qso_type) params.set('qso_type', currentFilters.qso_type);
             fetch(`/api/admin/logs?${params}`).then(r => r.json()).then(data => {
                 allLogs = data.logs;
                 renderLogsTable(data);
@@ -668,14 +797,18 @@
             noLogs.classList.add('hidden');
             tbody.innerHTML = data.logs.map(log => {
                 const statusOpts = STATUS_OPTIONS.map(s => `<option value="${s}" ${s === log.qsl_status ? 'selected' : ''}>${s}</option>`).join('');
+                const typeLabel = QSO_TYPE_LABELS[log.qso_type || 'NORMAL'] || '一般通联';
+                const typeIcon = QSO_TYPE_ICONS[log.qso_type || 'NORMAL'] || '';
+                const typeBadgeClass = log.qso_type === 'SAT' ? 'bg-purple-100 text-purple-700' : log.qso_type === 'REP' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600';
+
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500">${log.id}</td>
                     <td class="px-3 py-2 font-medium">${log.call}</td>
                     <td class="px-3 py-2">${log.qso_date || '-'}</td>
                     <td class="px-3 py-2">${log.time_on || '-'}</td>
-                    <td class="px-3 py-2">${log.band || '-'}</td>
-                    <td class="px-3 py-2 text-gray-600">${bandFreq(log.band)}</td>
+                    <td class="px-3 py-2">${formatFreqBandCell(log)}</td>
                     <td class="px-3 py-2">${log.mode || '-'}</td>
+                    <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}">${typeIcon} ${typeLabel}</span></td>
                     <td class="px-3 py-2">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
                     <td class="px-3 py-2"><select onchange="updateStatus(${log.id}, this.value)" class="border rounded px-2 py-1 text-xs">${statusOpts}</select></td>
                     <td class="px-3 py-2 whitespace-nowrap">
@@ -707,11 +840,21 @@
 
         // ===== 筛选控件 =====
         document.getElementById('filterApply').addEventListener('click', function() {
-            currentFilters = { call: document.getElementById('filterCall').value.trim(), band: document.getElementById('filterBand').value, mode: document.getElementById('filterMode').value, qsl_status: document.getElementById('filterStatus').value };
+            currentFilters = {
+                call: document.getElementById('filterCall').value.trim(),
+                band: document.getElementById('filterBand').value,
+                mode: document.getElementById('filterMode').value,
+                qsl_status: document.getElementById('filterStatus').value,
+                qso_type: document.getElementById('filterQsoType').value,
+            };
             currentPage = 1; loadLogs();
         });
         document.getElementById('filterClear').addEventListener('click', function() {
-            document.getElementById('filterCall').value = ''; document.getElementById('filterBand').value = ''; document.getElementById('filterMode').value = ''; document.getElementById('filterStatus').value = '';
+            document.getElementById('filterCall').value = '';
+            document.getElementById('filterBand').value = '';
+            document.getElementById('filterMode').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterQsoType').value = '';
             currentFilters = {}; currentPage = 1; loadLogs();
         });
 
@@ -738,13 +881,24 @@
             document.getElementById('editCall').value = log.call || '';
             document.getElementById('editQsoDate').value = log.qso_date || '';
             document.getElementById('editTimeOn').value = log.time_on || '';
-            document.getElementById('editBand').value = log.band || '';
-            document.getElementById('editFreq').value = log.band && BAND_FREQ[log.band] ? BAND_FREQ[log.band].split('-')[0] : '';
+            document.getElementById('editFreq').value = log.freq || '';
             document.getElementById('editMode').value = log.mode || '';
             document.getElementById('editRstSent').value = log.rst_sent || '';
             document.getElementById('editRstRcvd').value = log.rst_rcvd || '';
             document.getElementById('editQslStatus').value = log.qsl_status || '未发送';
             document.getElementById('editComment').value = log.comment || '';
+            document.getElementById('editQsoType').value = log.qso_type || 'NORMAL';
+            document.getElementById('editSatName').value = log.sat_name || '';
+            document.getElementById('editTxFreq').value = log.tx_freq || '';
+            document.getElementById('editRxFreq').value = log.rx_freq || '';
+
+            // 更新频率提示
+            const band = log.freq ? freqToBand(log.freq) : (log.band || '');
+            document.getElementById('editFreqBandHint').textContent = band ? `自动识别: ${band}` : '';
+
+            // 触发类型切换
+            updateEditFields();
+
             document.getElementById('editError').classList.add('hidden');
             document.getElementById('editModal').classList.remove('hidden');
         }
@@ -754,13 +908,30 @@
         document.getElementById('editForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const id = document.getElementById('editId').value;
-            const data = { call: document.getElementById('editCall').value.trim(), qso_date: document.getElementById('editQsoDate').value.trim(), time_on: document.getElementById('editTimeOn').value.trim(), band: document.getElementById('editBand').value, mode: document.getElementById('editMode').value, rst_sent: document.getElementById('editRstSent').value.trim(), rst_rcvd: document.getElementById('editRstRcvd').value.trim(), qsl_status: document.getElementById('editQslStatus').value, comment: document.getElementById('editComment').value.trim() };
-            const freq = document.getElementById('editFreq').value.trim();
-            if (freq) { const band = freqToBand(freq); if (band) data.band = band; }
+            const data = {
+                call: document.getElementById('editCall').value.trim(),
+                qso_date: document.getElementById('editQsoDate').value.trim(),
+                time_on: document.getElementById('editTimeOn').value.trim(),
+                mode: document.getElementById('editMode').value,
+                rst_sent: document.getElementById('editRstSent').value.trim(),
+                rst_rcvd: document.getElementById('editRstRcvd').value.trim(),
+                qsl_status: document.getElementById('editQslStatus').value,
+                comment: document.getElementById('editComment').value.trim(),
+                qso_type: document.getElementById('editQsoType').value,
+                freq: document.getElementById('editFreq').value.trim(),
+                tx_freq: document.getElementById('editTxFreq').value.trim(),
+                rx_freq: document.getElementById('editRxFreq').value.trim(),
+                sat_name: document.getElementById('editSatName').value.trim(),
+            };
+            // 由后端自动推导 band
+            if (data.freq) {
+                const band = freqToBand(data.freq);
+                if (band) data.band = band;
+            }
             const requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             const missing = [];
             for (const [k, label] of Object.entries(requiredFields)) { if (!data[k]) missing.push(label); }
-            if (!data.band) missing.push('波段或频率');
+            if (!data.freq && !data.band) missing.push('频率');
             if (missing.length) { document.getElementById('editError').textContent = '请填写必填字段：' + missing.join('、'); document.getElementById('editError').classList.remove('hidden'); return; }
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
@@ -775,12 +946,15 @@
             const form = e.target;
             const data = {};
             new FormData(form).forEach((v, k) => { if (v) data[k] = v; });
-            const freq = document.getElementById('freqInput').value.trim();
-            if (freq) { const band = freqToBand(freq); if (band) data.band = band; }
+            // 频率自动推导 band（后端也会做，前端先做一次用于校验）
+            if (data.freq) {
+                const band = freqToBand(data.freq);
+                if (band) data.band = band;
+            }
             const requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             const missing = [];
             for (const [k, label] of Object.entries(requiredFields)) { if (!data[k]) missing.push(label); }
-            if (!data.band) missing.push('波段或频率');
+            if (!data.freq && !data.band) missing.push('频率');
             if (missing.length) { showToast('请填写必填字段：' + missing.join('、'), 'warning'); return; }
             const btn = form.querySelector('button[type="submit"]');
             setLoading(btn, true);
@@ -793,14 +967,14 @@
                                 data.force = true;
                                 setLoading(btn, true);
                                 fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
-                                    .then(r2 => r2.json()).then(() => { form.reset(); loadLogs(); showToast('记录已添加', 'success'); setLoading(btn, false); })
+                                    .then(r2 => r2.json()).then(() => { form.reset(); updateAddFields(); loadLogs(); showToast('记录已添加', 'success'); setLoading(btn, false); })
                                     .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
                             }
                         });
                         return;
                     }
                     return r.json();
-                }).then(result => { setLoading(btn, false); if (result && result.ok) { form.reset(); loadLogs(); showToast('QSO 添加成功', 'success'); } })
+                }).then(result => { setLoading(btn, false); if (result && result.ok) { form.reset(); updateAddFields(); loadLogs(); showToast('QSO 添加成功', 'success'); } })
                 .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
         });
 

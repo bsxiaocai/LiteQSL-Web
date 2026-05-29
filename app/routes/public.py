@@ -9,10 +9,11 @@ def recent_logs(
     limit: int = Query(20, ge=1, le=100),
     band: str = Query(None),
     mode: str = Query(None),
+    qso_type: str = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    return get_recent_logs_paginated(band=band, mode=mode, page=page, page_size=page_size)
+    return get_recent_logs_paginated(band=band, mode=mode, qso_type=qso_type, page=page, page_size=page_size)
 
 
 @router.get("/search")

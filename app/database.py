@@ -6,6 +6,57 @@ from config import DATABASE_PATH
 
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
 
+# QSO 类型枚举（存英文，前端显示中文）
+QSO_TYPES = ["NORMAL", "SAT", "REP"]
+
+QSO_TYPE_LABELS = {
+    "NORMAL": "一般通联",
+    "SAT": "卫星通联",
+    "REP": "中继通联",
+}
+
+# ===== 频率 → 波段自动识别 =====
+# 根据 ITU Region 3（中国所在区域）业余频段划分
+# 返回标准波段名称（如 "20m"、"70cm"），无法识别时返回空字符串
+FREQ_BAND_RANGES = [
+    # (下限 MHz, 上限 MHz, 波段名称)
+    (1.800, 2.000, "160m"),
+    (3.500, 4.000, "80m"),
+    (5.300, 5.400, "60m"),
+    (7.000, 7.300, "40m"),
+    (10.100, 10.150, "30m"),
+    (14.000, 14.350, "20m"),
+    (18.068, 18.168, "17m"),
+    (21.000, 21.450, "15m"),
+    (24.890, 25.000, "12m"),
+    (28.000, 29.700, "10m"),
+    (50.000, 54.000, "6m"),
+    (144.000, 148.000, "2m"),
+    (430.000, 440.000, "70cm"),
+    (1240.000, 1300.000, "23cm"),
+]
+
+
+def freq_to_band(freq_mhz) -> str:
+    """根据频率（MHz）自动推导波段名称。
+
+    Args:
+        freq_mhz: 频率值，支持数字或字符串（如 14.270、"7.074"）
+
+    Returns:
+        波段名称（如 "20m"），无法识别时返回空字符串
+    """
+    if not freq_mhz:
+        return ""
+    try:
+        f = float(freq_mhz)
+    except (ValueError, TypeError):
+        return ""
+    for low, high, band_name in FREQ_BAND_RANGES:
+        if low <= f < high:
+            return band_name
+    return ""
+
 
 def _escape_like(value: str) -> str:
     """转义 SQLite LIKE 通配符（% 和 _），防止 LIKE 模式注入"""
@@ -50,11 +101,46 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
+
+    # ===== 数据库迁移：添加新字段 =====
+    # QSO 类型系统（NORMAL / SAT / REP）
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN qso_type TEXT DEFAULT 'NORMAL'")
+    except Exception:
+        pass  # 列已存在
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_type ON logs(qso_type)")
+    except Exception:
+        pass
+
+    # 频率字段（以 MHz 为单位存储，如 "14.270"）
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN freq TEXT")
+    except Exception:
+        pass
+
+    # 卫星/中继双频支持
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN tx_freq TEXT")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN rx_freq TEXT")
+    except Exception:
+        pass
+
+    # 卫星名称（如 "SO-50"、"AO-91"）
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN sat_name TEXT")
+    except Exception:
+        pass
+
     # 迁移：添加 first_login 列
     try:
         conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
     except Exception:
         pass  # 列已存在
+
     conn.commit()
     conn.close()
     seed_admin_user()
@@ -97,11 +183,36 @@ def update_password(username: str, new_password_hash: str) -> bool:
     return updated
 
 
+def _auto_fill_freq_band(data: dict) -> dict:
+    """自动补全频率与波段：优先使用 freq 推导 band，保持数据一致性。
+
+    - 如果有 freq 但没有 band → 自动计算 band
+    - 如果有 band 但没有 freq → 保留 band（兼容旧数据和 ADIF 导入）
+    - 如果两者都有 → 以 freq 为准重新计算 band
+    """
+    freq = data.get("freq", "")
+    band = data.get("band", "")
+
+    if freq:
+        # 有频率时，始终以频率为准推导波段
+        auto_band = freq_to_band(freq)
+        if auto_band:
+            data["band"] = auto_band
+        elif not band:
+            # 频率不在已知业余频段内，但用户给了频率，保留空 band
+            data["band"] = ""
+    # 如果没有 freq 也没有 band，保持原样（由上层校验）
+
+    return data
+
+
 def insert_log(data: dict) -> int:
+    data = _auto_fill_freq_band(data)
     conn = get_conn()
     cur = conn.execute(
-        """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
+                             qso_type, freq, tx_freq, rx_freq, sat_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -112,6 +223,11 @@ def insert_log(data: dict) -> int:
             data.get("rst_rcvd", ""),
             data.get("qsl_status", "未发送"),
             data.get("comment", ""),
+            data.get("qso_type", "NORMAL"),
+            data.get("freq", ""),
+            data.get("tx_freq", ""),
+            data.get("rx_freq", ""),
+            data.get("sat_name", ""),
         ),
     )
     conn.commit()
@@ -124,9 +240,11 @@ def insert_logs_batch(records: list[dict]) -> int:
     conn = get_conn()
     count = 0
     for rec in records:
+        rec = _auto_fill_freq_band(rec)
         conn.execute(
-            """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
+                                 qso_type, freq, tx_freq, rx_freq, sat_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 rec.get("call", ""),
                 rec.get("qso_date", ""),
@@ -137,6 +255,11 @@ def insert_logs_batch(records: list[dict]) -> int:
                 rec.get("rst_rcvd", ""),
                 rec.get("qsl_status", "未发送"),
                 rec.get("comment", ""),
+                rec.get("qso_type", "NORMAL"),
+                rec.get("freq", ""),
+                rec.get("tx_freq", ""),
+                rec.get("rx_freq", ""),
+                rec.get("sat_name", ""),
             ),
         )
         count += 1
@@ -172,9 +295,11 @@ def get_all_logs() -> list[dict]:
 
 
 def update_log(log_id: int, data: dict) -> bool:
+    data = _auto_fill_freq_band(data)
     conn = get_conn()
     cur = conn.execute(
-        "UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?, comment=? WHERE id=?",
+        """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
+                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=? WHERE id=?""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -185,6 +310,11 @@ def update_log(log_id: int, data: dict) -> bool:
             data.get("rst_rcvd", ""),
             data.get("qsl_status", "未发送"),
             data.get("comment", ""),
+            data.get("qso_type", "NORMAL"),
+            data.get("freq", ""),
+            data.get("tx_freq", ""),
+            data.get("rx_freq", ""),
+            data.get("sat_name", ""),
             log_id,
         ),
     )
@@ -215,7 +345,7 @@ def delete_log(log_id: int) -> bool:
 
 
 def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
-    """分页查询通联记录，支持按呼号、波段、模式、卡片状态筛选"""
+    """分页查询通联记录，支持按呼号、波段、模式、卡片状态、QSO类型筛选"""
     conditions = ["1=1"]
     params = []
     if filters.get("call"):
@@ -230,6 +360,9 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
     if filters.get("qsl_status"):
         conditions.append("qsl_status = ?")
         params.append(filters["qsl_status"])
+    if filters.get("qso_type"):
+        conditions.append("qso_type = ?")
+        params.append(filters["qso_type"])
     where = " AND ".join(conditions)
 
     conn = get_conn()
@@ -263,12 +396,14 @@ def check_duplicates_batch(records: list[dict]) -> list[dict]:
     """批量检测重复记录，返回重复记录列表"""
     duplicates = []
     for rec in records:
+        # 先自动补全 band（如果只有 freq）
+        rec_filled = _auto_fill_freq_band(dict(rec))
         existing = check_duplicate(
-            rec.get("call", ""),
-            rec.get("qso_date", ""),
-            rec.get("time_on", ""),
-            rec.get("band", ""),
-            rec.get("mode", ""),
+            rec_filled.get("call", ""),
+            rec_filled.get("qso_date", ""),
+            rec_filled.get("time_on", ""),
+            rec_filled.get("band", ""),
+            rec_filled.get("mode", ""),
         )
         if existing:
             duplicates.append({"record": rec, "existing": existing})
@@ -290,19 +425,29 @@ def export_csv(records: list[dict]) -> str:
     output = io.StringIO()
     output.write("﻿")  # UTF-8 BOM
     writer = csv.writer(output)
-    writer.writerow(["CALL", "DATE", "TIME", "BAND", "FREQ", "MODE", "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT"])
+    writer.writerow([
+        "CALL", "DATE", "TIME", "BAND", "FREQ", "MODE",
+        "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT",
+        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME",
+    ])
     for rec in records:
+        # 优先使用记录中存储的 freq，如果没有则从 BAND_FREQ_MAP 推导
+        freq_val = rec.get("freq", "") or BAND_FREQ_MAP.get(rec.get("band", ""), "")
         writer.writerow([
             rec.get("call", ""),
             rec.get("qso_date", ""),
             rec.get("time_on", ""),
             rec.get("band", ""),
-            BAND_FREQ_MAP.get(rec.get("band", ""), ""),
+            freq_val,
             rec.get("mode", ""),
             rec.get("rst_sent", ""),
             rec.get("rst_rcvd", ""),
             rec.get("qsl_status", ""),
             rec.get("comment", ""),
+            rec.get("qso_type", "NORMAL"),
+            rec.get("tx_freq", ""),
+            rec.get("rx_freq", ""),
+            rec.get("sat_name", ""),
         ])
     return output.getvalue()
 
@@ -328,8 +473,8 @@ def complete_first_login(username: str, new_username: str, new_password_hash: st
     return updated
 
 
-def get_recent_logs_paginated(band: str = None, mode: str = None, page: int = 1, page_size: int = 20) -> dict:
-    """分页查询最近通联记录，支持波段和模式筛选"""
+def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str = None, page: int = 1, page_size: int = 20) -> dict:
+    """分页查询最近通联记录，支持波段、模式和QSO类型筛选"""
     conditions = ["1=1"]
     params = []
     if band:
@@ -338,6 +483,9 @@ def get_recent_logs_paginated(band: str = None, mode: str = None, page: int = 1,
     if mode:
         conditions.append("mode = ?")
         params.append(mode)
+    if qso_type:
+        conditions.append("qso_type = ?")
+        params.append(qso_type)
     where = " AND ".join(conditions)
     conn = get_conn()
     total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
