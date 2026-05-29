@@ -7,12 +7,13 @@ from config import DATABASE_PATH
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
 
 # QSO 类型枚举（存英文，前端显示中文）
-QSO_TYPES = ["NORMAL", "SAT", "REP"]
+QSO_TYPES = ["NORMAL", "SAT", "REP", "EYEBALL"]
 
 QSO_TYPE_LABELS = {
     "NORMAL": "一般通联",
     "SAT": "卫星通联",
     "REP": "中继通联",
+    "EYEBALL": "Eyeball通联",
 }
 
 # ===== 频率 → 波段自动识别 =====
@@ -135,6 +136,12 @@ def init_db():
     except Exception:
         pass
 
+    # Silent Key 标识（表示该 HAM 已去世）
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN is_sk INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
     # 迁移：添加 first_login 列
     try:
         conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
@@ -211,8 +218,8 @@ def insert_log(data: dict) -> int:
     conn = get_conn()
     cur = conn.execute(
         """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                             qso_type, freq, tx_freq, rx_freq, sat_name)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                             qso_type, freq, tx_freq, rx_freq, sat_name, is_sk)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -228,6 +235,7 @@ def insert_log(data: dict) -> int:
             data.get("tx_freq", ""),
             data.get("rx_freq", ""),
             data.get("sat_name", ""),
+            1 if data.get("is_sk") else 0,
         ),
     )
     conn.commit()
@@ -243,8 +251,8 @@ def insert_logs_batch(records: list[dict]) -> int:
         rec = _auto_fill_freq_band(rec)
         conn.execute(
             """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                                 qso_type, freq, tx_freq, rx_freq, sat_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 qso_type, freq, tx_freq, rx_freq, sat_name, is_sk)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 rec.get("call", ""),
                 rec.get("qso_date", ""),
@@ -260,6 +268,7 @@ def insert_logs_batch(records: list[dict]) -> int:
                 rec.get("tx_freq", ""),
                 rec.get("rx_freq", ""),
                 rec.get("sat_name", ""),
+                1 if rec.get("is_sk") else 0,
             ),
         )
         count += 1
@@ -299,7 +308,7 @@ def update_log(log_id: int, data: dict) -> bool:
     conn = get_conn()
     cur = conn.execute(
         """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
-                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=? WHERE id=?""",
+                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=? WHERE id=?""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -315,6 +324,7 @@ def update_log(log_id: int, data: dict) -> bool:
             data.get("tx_freq", ""),
             data.get("rx_freq", ""),
             data.get("sat_name", ""),
+            1 if data.get("is_sk") else 0,
             log_id,
         ),
     )
@@ -428,7 +438,7 @@ def export_csv(records: list[dict]) -> str:
     writer.writerow([
         "CALL", "DATE", "TIME", "BAND", "FREQ", "MODE",
         "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT",
-        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME",
+        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME", "IS_SK",
     ])
     for rec in records:
         # 优先使用记录中存储的 freq，如果没有则从 BAND_FREQ_MAP 推导
@@ -448,6 +458,7 @@ def export_csv(records: list[dict]) -> str:
             rec.get("tx_freq", ""),
             rec.get("rx_freq", ""),
             rec.get("sat_name", ""),
+            rec.get("is_sk", 0),
         ])
     return output.getvalue()
 

@@ -26,13 +26,14 @@
 
 ### QSO 类型系统
 
-支持三种 QSO 类型，适配不同通联场景：
+支持四种 QSO 类型，适配不同通联场景：
 
 | 类型 | 标签 | 说明 | 频率显示 |
 |------|------|------|----------|
 | `NORMAL` | 一般通联 | HF/VHF/UHF 常规通联 | 单频率，如 `14.270 MHz` |
 | `SAT` | 🛰 卫星通联 | 支持上下行频率 + 卫星名称 | `145.850 ↑ / 436.795 ↓` |
 | `REP` | 📡 中继通联 | 支持输入输出频率 + 频差计算 | `439.600 (-5.0MHz)` |
+| `EYEBALL` | 👀 Eyeball通联 | 线下面对面交流，频率/模式可选 | 可为空 |
 
 ### 后台管理
 
@@ -306,13 +307,14 @@ LiteQSL-Web/
 | `freq` | TEXT | 主频率（MHz），如 `14.270` |
 | `band` | TEXT | 波段，由频率自动推导 |
 | `mode` | TEXT | 模式，如 SSB、CW、FT8 |
-| `qso_type` | TEXT | QSO 类型：NORMAL / SAT / REP |
+| `qso_type` | TEXT | QSO 类型：NORMAL / SAT / REP / EYEBALL |
 | `tx_freq` | TEXT | 发射/上行频率（MHz） |
 | `rx_freq` | TEXT | 接收/下行频率（MHz） |
 | `sat_name` | TEXT | 卫星名称，如 SO-50 |
 | `rst_sent` | TEXT | 发送的 RST 信号报告 |
 | `rst_rcvd` | TEXT | 接收的 RST 信号报告 |
 | `qsl_status` | TEXT | 卡片状态 |
+| `is_sk` | INTEGER | Silent Key 标识（0=否，1=是） |
 | `comment` | TEXT | 备注 |
 | `created_at` | TIMESTAMP | 记录创建时间 |
 

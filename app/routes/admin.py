@@ -170,19 +170,27 @@ def get_qso_types():
 async def add_log(request: Request):
     require_admin(request)
     data = await request.json()
-    required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
-    for field in required_fields:
-        if not data.get(field):
-            raise HTTPException(status_code=400, detail=f"{field} 不能为空")
-
-    # 频率/波段校验：至少填写一项（freq 或 band）
-    # 数据库层会自动 freq → band 推导
-    if not data.get("freq") and not data.get("band"):
-        raise HTTPException(status_code=400, detail="频率和波段至少填写一项")
 
     # 设置默认 qso_type
     if not data.get("qso_type"):
         data["qso_type"] = "NORMAL"
+
+    qso_type = data.get("qso_type", "NORMAL")
+
+    # Eyeball 通联不需要频率、模式、波段
+    if qso_type == "EYEBALL":
+        required_fields = ["call", "qso_date", "time_on", "qsl_status"]
+    else:
+        required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+
+    for field in required_fields:
+        if not data.get(field):
+            raise HTTPException(status_code=400, detail=f"{field} 不能为空")
+
+    # 频率/波段校验：至少填写一项（freq 或 band）- Eyeball 通联跳过
+    if qso_type != "EYEBALL":
+        if not data.get("freq") and not data.get("band"):
+            raise HTTPException(status_code=400, detail="频率和波段至少填写一项")
 
     # 自动推导 band（如果只有 freq 没有 band）
     if data.get("freq") and not data.get("band"):
@@ -194,11 +202,11 @@ async def add_log(request: Request):
     if not data.get("force"):
         # 需要 band 来做重复检测
         if data.get("band"):
-            existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data["mode"])
+            existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data.get("mode", ""))
             if existing:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data['mode']} 的记录 (ID: {existing['id']})",
+                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data.get('mode', '')} 的记录 (ID: {existing['id']})",
                 )
     log_id = insert_log(data)
     return {"ok": True, "id": log_id}
