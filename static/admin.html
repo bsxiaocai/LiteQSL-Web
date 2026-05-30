@@ -879,6 +879,7 @@
             const repFields = document.getElementById('addRepFields');
             const eyeballFields = document.getElementById('addEyeballFields');
             const timeGroup = document.getElementById('addTimeGroup');
+            const addForm = document.getElementById('addForm');
 
             function updateFields() {
                 const qsoType = typeSelect.value;
@@ -893,16 +894,33 @@
                 if (qsoType === 'NORMAL') {
                     // 标准通联：显示频率、模式、RST
                     normalFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'SAT') {
                     // 卫星通联：显示卫星名称、上行/下行频率、模式
                     satFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'REP') {
                     // 中继通联：显示上行/下行频率、中继名称、模式
                     repFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'EYEBALL') {
                     // Eyeball 通联：显示地点字段，隐藏时间、频率、波段、模式、RST
                     eyeballFields.classList.remove('hidden');
                     timeGroup.classList.add('hidden');
+                    // 清除时间字段和其他类型特有的字段（避免前一次输入干扰）
+                    addForm.querySelector('[name="time_on"]').value = '';
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
                 }
             }
 
@@ -1185,11 +1203,14 @@
                 // Eyeball QSO 类型标签：如果有地点信息，添加 title 悬停提示
                 const titleAttr = (log.qso_type === 'EYEBALL' && log.qth) ? ` title="${log.qth}"` : '';
 
+                // Eyeball QSO 只有日期没有具体时间，显示 "-"
+                const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
+
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500 text-center whitespace-nowrap">${log.id}</td>
                     <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${formatDate(log.qso_date)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${formatTime(log.time_on)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${timeDisplay}</td>
                     <td class="px-3 py-2">${formatFreqCell(log)}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${log.mode || '-'}</td>
                     <td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}"${titleAttr}>${typeIcon} ${typeLabel}</span></td>
@@ -1279,16 +1300,33 @@
                 if (qsoType === 'NORMAL') {
                     // 标准通联：显示频率、模式、RST
                     normalFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'SAT') {
                     // 卫星通联：显示卫星名称、上行/下行频率、模式
                     satFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'REP') {
                     // 中继通联：显示上行/下行频率、中继名称、模式
                     repFields.classList.remove('hidden');
+                    // 清除其他类型特有的字段
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    eyeballFields.querySelectorAll('input').forEach(el => el.value = '');
                 } else if (qsoType === 'EYEBALL') {
                     // Eyeball 通联：显示地点字段，隐藏时间、频率、波段、模式、RST
                     eyeballFields.classList.remove('hidden');
                     timeGroup.classList.add('hidden');
+                    // 清除时间字段和其他类型特有的字段（避免前一次输入干扰）
+                    document.getElementById('editTimeOn').value = '';
+                    normalFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    satFields.querySelectorAll('input, select').forEach(el => el.value = '');
+                    repFields.querySelectorAll('input, select').forEach(el => el.value = '');
                 }
             }
 

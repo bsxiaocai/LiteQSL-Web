@@ -354,10 +354,13 @@
                 callHtml += ' <span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-600 ml-1">SK</span>';
             }
 
+            // Eyeball QSO 只有日期没有具体时间，显示 "-"
+            const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
+
             return `<tr class="border-b hover:bg-gray-50">
                 <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
                 <td class="px-3 py-2 whitespace-nowrap">${formatDate(log.qso_date)}</td>
-                <td class="px-3 py-2 whitespace-nowrap">${formatTime(log.time_on)}</td>
+                <td class="px-3 py-2 whitespace-nowrap">${timeDisplay}</td>
                 <td class="px-3 py-2 text-gray-600">${formatFreqCell(log)}</td>
                 <td class="px-3 py-2 whitespace-nowrap">${log.mode || '-'}</td>
                 <td class="px-3 py-2 whitespace-nowrap">${formatTypeBadge(log.qso_type, log.qth)}</td>
