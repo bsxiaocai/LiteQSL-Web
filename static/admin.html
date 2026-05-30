@@ -191,6 +191,16 @@
                                         <option>SSTV</option><option>DIGITAL</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
+                                    <input type="text" name="rst_sent" placeholder="59"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
+                                    <input type="text" name="rst_rcvd" placeholder="59"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -548,6 +558,16 @@
                                     <option>PSK31</option><option>RTTY</option><option>JS8</option>
                                     <option>SSTV</option><option>DIGITAL</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
+                                <input type="text" id="editSatRstSent" placeholder="59"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
+                                <input type="text" id="editSatRstRcvd" placeholder="59"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             </div>
                         </div>
                     </div>
@@ -1293,6 +1313,8 @@
                 document.getElementById('editTxFreq').value = log.tx_freq || '';
                 document.getElementById('editRxFreq').value = log.rx_freq || '';
                 document.getElementById('editSatMode').value = log.mode || '';
+                document.getElementById('editSatRstSent').value = log.rst_sent || '';
+                document.getElementById('editSatRstRcvd').value = log.rst_rcvd || '';
             } else if (qsoType === 'REP') {
                 document.getElementById('editRepTxFreq').value = log.tx_freq || '';
                 document.getElementById('editRepRxFreq').value = log.rx_freq || '';
@@ -1348,6 +1370,8 @@
                 data.tx_freq = document.getElementById('editTxFreq').value.trim();
                 data.rx_freq = document.getElementById('editRxFreq').value.trim();
                 data.mode = document.getElementById('editSatMode').value;
+                data.rst_sent = document.getElementById('editSatRstSent').value.trim();
+                data.rst_rcvd = document.getElementById('editSatRstRcvd').value.trim();
             } else if (qsoType === 'REP') {
                 data.tx_freq = document.getElementById('editRepTxFreq').value.trim();
                 data.rx_freq = document.getElementById('editRepRxFreq').value.trim();
@@ -1371,7 +1395,7 @@
             if (qsoType === 'EYEBALL') {
                 requiredFields = {call:'呼号',qso_date:'日期',qsl_status:'卡片状态'};
             } else if (qsoType === 'SAT') {
-                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
+                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else if (qsoType === 'REP') {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else {
@@ -1419,6 +1443,8 @@
                 data.tx_freq = form.querySelector('[name="tx_freq"]').value.trim();
                 data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
                 data.mode = form.querySelector('[name="mode"]').value;
+                data.rst_sent = form.querySelector('[name="rst_sent"]').value.trim();
+                data.rst_rcvd = form.querySelector('[name="rst_rcvd"]').value.trim();
             } else if (qsoType === 'REP') {
                 data.tx_freq = form.querySelector('[name="tx_freq"]').value.trim();
                 data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
@@ -1442,7 +1468,7 @@
             if (qsoType === 'EYEBALL') {
                 requiredFields = {call:'呼号',qso_date:'日期',qsl_status:'卡片状态'};
             } else if (qsoType === 'SAT') {
-                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
+                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else if (qsoType === 'REP') {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else {

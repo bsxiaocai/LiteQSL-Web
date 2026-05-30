@@ -182,8 +182,8 @@ async def add_log(request: Request):
         # Eyeball 通联：只需要呼号、日期、卡片状态（不需要时间、频率、模式、RST）
         required_fields = ["call", "qso_date", "qsl_status"]
     elif qso_type == "SAT":
-        # 卫星通联：需要呼号、日期、时间、卫星名称、上行/下行频率、模式
-        required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "qsl_status"]
+        # 卫星通联：需要呼号、日期、时间、卫星名称、上行/下行频率、模式、RST
+        required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
     elif qso_type == "REP":
         # 中继通联：需要呼号、日期、时间、上行/下行频率、模式、RST
         required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
