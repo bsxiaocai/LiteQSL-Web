@@ -913,6 +913,33 @@
         // 初始化录入表单的类型切换
         const updateAddFormFields = setupAddFormTypeToggle();
 
+        // ===== 动态绑定录入表单 RST blur 校验（跟随 QSO 类型切换） =====
+        function bindAddFormRstValidation() {
+            const qsoType = document.getElementById('qsoTypeSelect').value;
+            const form = document.getElementById('addForm');
+            let rstSentEl, rstRcvdEl, modeEl;
+            if (qsoType === 'SAT') {
+                const container = document.getElementById('addSatFields');
+                rstSentEl = container.querySelector('[name="rst_sent"]');
+                rstRcvdEl = container.querySelector('[name="rst_rcvd"]');
+                modeEl = container.querySelector('[name="mode"]');
+            } else if (qsoType === 'REP') {
+                const container = document.getElementById('addRepFields');
+                rstSentEl = container.querySelector('[name="rst_sent"]');
+                rstRcvdEl = container.querySelector('[name="rst_rcvd"]');
+                modeEl = container.querySelector('[name="mode"]');
+            } else {
+                const container = document.getElementById('addNormalFields');
+                rstSentEl = container.querySelector('[name="rst_sent"]');
+                rstRcvdEl = container.querySelector('[name="rst_rcvd"]');
+                modeEl = container.querySelector('[name="mode"]');
+            }
+            if (rstSentEl) rstSentEl.addEventListener('blur', function() { validateField(this, [validators.rst(modeEl.value)]); });
+            if (rstRcvdEl) rstRcvdEl.addEventListener('blur', function() { validateField(this, [validators.rst(modeEl.value)]); });
+        }
+        bindAddFormRstValidation();
+        document.getElementById('qsoTypeSelect').addEventListener('change', bindAddFormRstValidation);
+
         // ===== 频率输入 → 自动显示波段提示 =====
         function setupFreqHint(freqInputId, hintId) {
             const freqInput = document.getElementById(freqInputId);
@@ -947,10 +974,7 @@
             rst: (mode) => (v) => { if (!v) return ''; if (mode === 'CW') { if (!/^\d{3}$/.test(v)) return 'CW模式 RST必须为3位数字'; } else { if (!/^\d{2}$/.test(v)) return 'RST必须为2位数字 (如 59)'; } return ''; },
         };
 
-        // ===== 录入表单 blur 校验（仅 RST） =====
-        const addFormEl = document.getElementById('addForm');
-        addFormEl.querySelector('[name="rst_sent"]').addEventListener('blur', function() { validateField(this, [validators.rst(addFormEl.querySelector('[name="mode"]').value)]); });
-        addFormEl.querySelector('[name="rst_rcvd"]').addEventListener('blur', function() { validateField(this, [validators.rst(addFormEl.querySelector('[name="mode"]').value)]); });
+        // ===== 录入表单 blur 校验由 bindAddFormRstValidation() 动态管理 =====
 
         // ===== 编辑弹窗 blur 校验（仅 RST） =====
         document.getElementById('editRstSent').addEventListener('blur', function() { validateField(this, [validators.rst(document.getElementById('editMode').value)]); });
@@ -1432,29 +1456,32 @@
                 is_sk: document.getElementById('isSkCheck').checked ? 1 : 0,
             };
 
-            // 根据 QSO 类型获取对应字段
+            // 根据 QSO 类型在对应容器中获取字段（避免同名字段冲突）
             if (qsoType === 'NORMAL') {
-                data.freq = form.querySelector('[name="freq"]').value.trim();
-                data.mode = form.querySelector('[name="mode"]').value;
-                data.rst_sent = form.querySelector('[name="rst_sent"]').value.trim();
-                data.rst_rcvd = form.querySelector('[name="rst_rcvd"]').value.trim();
+                const container = document.getElementById('addNormalFields');
+                data.freq = container.querySelector('[name="freq"]').value.trim();
+                data.mode = container.querySelector('[name="mode"]').value;
+                data.rst_sent = container.querySelector('[name="rst_sent"]').value.trim();
+                data.rst_rcvd = container.querySelector('[name="rst_rcvd"]').value.trim();
             } else if (qsoType === 'SAT') {
-                data.sat_name = form.querySelector('[name="sat_name"]').value.trim();
-                data.tx_freq = form.querySelector('[name="tx_freq"]').value.trim();
-                data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
-                data.mode = form.querySelector('[name="mode"]').value;
-                data.rst_sent = form.querySelector('[name="rst_sent"]').value.trim();
-                data.rst_rcvd = form.querySelector('[name="rst_rcvd"]').value.trim();
+                const container = document.getElementById('addSatFields');
+                data.sat_name = container.querySelector('[name="sat_name"]').value.trim();
+                data.tx_freq = container.querySelector('[name="tx_freq"]').value.trim();
+                data.rx_freq = container.querySelector('[name="rx_freq"]').value.trim();
+                data.mode = container.querySelector('[name="mode"]').value;
+                data.rst_sent = container.querySelector('[name="rst_sent"]').value.trim();
+                data.rst_rcvd = container.querySelector('[name="rst_rcvd"]').value.trim();
             } else if (qsoType === 'REP') {
-                data.tx_freq = form.querySelector('[name="tx_freq"]').value.trim();
-                data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
-                data.sat_name = form.querySelector('[name="sat_name"]').value.trim();
-                data.mode = form.querySelector('[name="mode"]').value;
-                data.rst_sent = form.querySelector('[name="rst_sent"]').value.trim();
-                data.rst_rcvd = form.querySelector('[name="rst_rcvd"]').value.trim();
+                const container = document.getElementById('addRepFields');
+                data.tx_freq = container.querySelector('[name="tx_freq"]').value.trim();
+                data.rx_freq = container.querySelector('[name="rx_freq"]').value.trim();
+                data.sat_name = container.querySelector('[name="sat_name"]').value.trim();
+                data.mode = container.querySelector('[name="mode"]').value;
+                data.rst_sent = container.querySelector('[name="rst_sent"]').value.trim();
+                data.rst_rcvd = container.querySelector('[name="rst_rcvd"]').value.trim();
             } else if (qsoType === 'EYEBALL') {
                 // Eyeball 通联：获取地点字段
-                data.qth = form.querySelector('[name="qth"]').value.trim();
+                data.qth = document.getElementById('addEyeballFields').querySelector('[name="qth"]').value.trim();
             }
 
             // 频率自动推导 band（后端也会做，前端先做一次用于校验）
