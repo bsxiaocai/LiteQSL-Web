@@ -191,10 +191,10 @@
             const qsoType = log.qso_type || 'NORMAL';
 
             if (qsoType === 'SAT') {
-                // 卫星通联：显示上下行频率
+                // 卫星通联：显示卫星名称 + 上下行频率
                 let html = '';
                 if (log.sat_name) {
-                    html += `<div class="text-purple-600 text-xs font-medium mb-1">🛰 ${log.sat_name}</div>`;
+                    html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
                 }
                 if (log.tx_freq && log.rx_freq) {
                     html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
@@ -207,12 +207,10 @@
                 }
                 return html;
             } else if (qsoType === 'REP') {
-                // 中继通联：显示输入输出频率
+                // 中继通联：显示上下行频率
                 let html = '';
                 if (log.tx_freq && log.rx_freq) {
-                    const diff = (parseFloat(log.rx_freq) - parseFloat(log.tx_freq)).toFixed(1);
-                    const sign = diff >= 0 ? '+' : '';
-                    html += `<div class="text-xs">${log.rx_freq} (${sign}${diff}MHz)</div>`;
+                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
                 } else if (log.freq) {
                     html += `<div class="text-xs">${log.freq} MHz</div>`;
                 } else if (log.band) {
@@ -221,10 +219,28 @@
                     html = '-';
                 }
                 return html;
+            } else if (qsoType === 'EYEBALL') {
+                // Eyeball 通联：显示备注（如果有）
+                if (log.comment) {
+                    return `<span class="text-gray-500 text-xs">${log.comment}</span>`;
+                }
+                return '<span class="text-gray-400 text-xs">-</span>';
             }
 
-            // 一般通联：显示频率
-            return `<span>${formatFreqDisplay(log)}</span>`;
+            // 普通通联：显示频率和波段
+            const freq = log.freq || '';
+            const band = log.band || '';
+            let html = '';
+            if (freq) {
+                html += `<span class="font-medium">${freq} MHz</span>`;
+            }
+            if (band) {
+                html += `<span class="text-gray-400 text-xs ml-1">${band}</span>`;
+            }
+            if (!freq && !band) {
+                html = '-';
+            }
+            return html;
         }
 
         function rowHtml(log) {

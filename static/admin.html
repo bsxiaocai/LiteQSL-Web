@@ -682,8 +682,48 @@
             return log.band || '-';
         }
 
-        // 格式化完整的频率/波段单元格（管理表格用）
-        function formatFreqBandCell(log) {
+        // 格式化频率单元格（考虑 QSO 类型，与公共查询页保持一致）
+        function formatFreqCell(log) {
+            const qsoType = log.qso_type || 'NORMAL';
+
+            if (qsoType === 'SAT') {
+                // 卫星通联：显示卫星名称 + 上下行频率
+                let html = '';
+                if (log.sat_name) {
+                    html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
+                }
+                if (log.tx_freq && log.rx_freq) {
+                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                } else if (log.freq) {
+                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                } else if (log.band) {
+                    html += `<div class="text-xs">${log.band}</div>`;
+                } else {
+                    html = '-';
+                }
+                return html;
+            } else if (qsoType === 'REP') {
+                // 中继通联：显示上下行频率
+                let html = '';
+                if (log.tx_freq && log.rx_freq) {
+                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                } else if (log.freq) {
+                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                } else if (log.band) {
+                    html += `<div class="text-xs">${log.band}</div>`;
+                } else {
+                    html = '-';
+                }
+                return html;
+            } else if (qsoType === 'EYEBALL') {
+                // Eyeball 通联：显示 QTH（如果有）
+                if (log.comment) {
+                    return `<span class="text-gray-500 text-xs">${log.comment}</span>`;
+                }
+                return '<span class="text-gray-400 text-xs">-</span>';
+            }
+
+            // 普通通联：显示频率和波段
             const freq = log.freq || '';
             const band = log.band || '';
             let html = '';
@@ -977,7 +1017,7 @@
                     <td class="px-3 py-2 font-medium">${callHtml}</td>
                     <td class="px-3 py-2">${log.qso_date || '-'}</td>
                     <td class="px-3 py-2">${log.time_on || '-'}</td>
-                    <td class="px-3 py-2">${formatFreqBandCell(log)}</td>
+                    <td class="px-3 py-2">${formatFreqCell(log)}</td>
                     <td class="px-3 py-2">${log.mode || '-'}</td>
                     <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}">${typeIcon} ${typeLabel}</span></td>
                     <td class="px-3 py-2">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
