@@ -129,6 +129,9 @@ def export_adif(records: list[dict]) -> str:
     - 标准字段：CALL, QSO_DATE, TIME_ON, BAND, MODE, RST_SENT, RST_RCVD, QSL_STATUS, COMMENT
     - 频率字段：FREQ（MHz → kHz 转换）
     - 卫星字段：TX_FREQ, RX_FREQ, SAT_NAME, PROP_MODE, FREQ_RX
+
+    注意：Eyeball QSO（线下见面）在 ADIF 导出时被忽略，
+    因为 Eyeball QSO 没有真实的频率和模式数据，不适合 ADIF 格式。
     """
     lines = []
     lines.append("ADIF Export from LiteQSL-Web")
@@ -137,8 +140,12 @@ def export_adif(records: list[dict]) -> str:
     lines.append("")
 
     for rec in records:
-        parts = []
+        # ===== Eyeball QSO 在 ADIF 导出时被忽略 =====
         qso_type = rec.get("qso_type", "NORMAL")
+        if qso_type == "EYEBALL":
+            continue  # 跳过 Eyeball QSO，不写入 ADIF
+
+        parts = []
 
         # ===== 标准字段 =====
         _append_adif_field(parts, "CALL", rec.get("call", ""))

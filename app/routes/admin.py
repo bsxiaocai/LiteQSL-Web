@@ -177,20 +177,23 @@ async def add_log(request: Request):
 
     qso_type = data.get("qso_type", "NORMAL")
 
-    # Eyeball 通联不需要频率、模式、波段
+    # 根据 QSO 类型设置不同的必填字段
     if qso_type == "EYEBALL":
-        required_fields = ["call", "qso_date", "time_on", "qsl_status"]
+        # Eyeball 通联：只需要呼号、日期、卡片状态（不需要时间、频率、模式、RST）
+        required_fields = ["call", "qso_date", "qsl_status"]
+    elif qso_type == "SAT":
+        # 卫星通联：需要呼号、日期、时间、卫星名称、上行/下行频率、模式
+        required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "qsl_status"]
+    elif qso_type == "REP":
+        # 中继通联：需要呼号、日期、时间、上行/下行频率、模式
+        required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "qsl_status"]
     else:
-        required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+        # 标准通联：需要所有字段
+        required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
     for field in required_fields:
         if not data.get(field):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
-
-    # 频率/波段校验：至少填写一项（freq 或 band）- Eyeball 通联跳过
-    if qso_type != "EYEBALL":
-        if not data.get("freq") and not data.get("band"):
-            raise HTTPException(status_code=400, detail="频率和波段至少填写一项")
 
     # 自动推导 band（如果只有 freq 没有 band）
     if data.get("freq") and not data.get("band"):
