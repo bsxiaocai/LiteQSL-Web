@@ -142,6 +142,12 @@ def init_db():
     except Exception:
         pass
 
+    # Eyeball QSO 地点字段（用于线下见面的地点信息）
+    try:
+        conn.execute("ALTER TABLE logs ADD COLUMN qth TEXT")
+    except Exception:
+        pass
+
     # 迁移：添加 first_login 列
     try:
         conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
@@ -218,8 +224,8 @@ def insert_log(data: dict) -> int:
     conn = get_conn()
     cur = conn.execute(
         """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                             qso_type, freq, tx_freq, rx_freq, sat_name, is_sk)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                             qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -236,6 +242,7 @@ def insert_log(data: dict) -> int:
             data.get("rx_freq", ""),
             data.get("sat_name", ""),
             1 if data.get("is_sk") else 0,
+            data.get("qth", ""),
         ),
     )
     conn.commit()
@@ -251,8 +258,8 @@ def insert_logs_batch(records: list[dict]) -> int:
         rec = _auto_fill_freq_band(rec)
         conn.execute(
             """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                                 qso_type, freq, tx_freq, rx_freq, sat_name, is_sk)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 rec.get("call", ""),
                 rec.get("qso_date", ""),
@@ -269,6 +276,7 @@ def insert_logs_batch(records: list[dict]) -> int:
                 rec.get("rx_freq", ""),
                 rec.get("sat_name", ""),
                 1 if rec.get("is_sk") else 0,
+                rec.get("qth", ""),
             ),
         )
         count += 1
@@ -308,7 +316,7 @@ def update_log(log_id: int, data: dict) -> bool:
     conn = get_conn()
     cur = conn.execute(
         """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
-                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=? WHERE id=?""",
+                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=?, qth=? WHERE id=?""",
         (
             data.get("call", ""),
             data.get("qso_date", ""),
@@ -325,6 +333,7 @@ def update_log(log_id: int, data: dict) -> bool:
             data.get("rx_freq", ""),
             data.get("sat_name", ""),
             1 if data.get("is_sk") else 0,
+            data.get("qth", ""),
             log_id,
         ),
     )

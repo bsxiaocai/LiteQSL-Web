@@ -96,7 +96,7 @@
                                 <option value="NORMAL">一般通联</option>
                                 <option value="SAT">卫星通联 🛰</option>
                                 <option value="REP">中继通联 📡</option>
-                                <option value="EYEBALL">Eyeball通联 👀</option>
+                                <option value="EYEBALL">Eyeball QSO 👀</option>
                             </select>
                         </div>
                     </div>
@@ -197,6 +197,20 @@
                                         <option>PSK31</option><option>RTTY</option><option>JS8</option>
                                         <option>SSTV</option><option>DIGITAL</option>
                                     </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Eyeball 通联专用字段（默认隐藏） -->
+                    <div id="addEyeballFields" class="hidden">
+                        <div class="border-t pt-4 mt-2">
+                            <h3 class="text-sm font-medium text-gray-700 mb-3">👀 Eyeball QSO 信息</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">地点（可选）</label>
+                                    <input type="text" name="qth" placeholder="如 长沙大学城"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                 </div>
                             </div>
                         </div>
@@ -317,7 +331,7 @@
                             <option value="NORMAL">一般通联</option>
                             <option value="SAT">卫星通联</option>
                             <option value="REP">中继通联</option>
-                            <option value="EYEBALL">Eyeball通联</option>
+                            <option value="EYEBALL">Eyeball QSO</option>
                         </select>
                     </div>
                     <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm min-h-[44px]">筛选</button>
@@ -536,6 +550,20 @@
                     </div>
                 </div>
 
+                <!-- Eyeball 通联专用字段（编辑弹窗，默认隐藏） -->
+                <div id="editEyeballFields" class="hidden mb-4">
+                    <div class="border-t pt-4">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">👀 Eyeball QSO 信息</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">地点（可选）</label>
+                                <input type="text" id="editQth"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 通用字段：卡片状态、SK、备注 -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                     <div>
@@ -613,7 +641,8 @@
 
     <script>
         // ===== 常量定义 =====
-        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联', 'EYEBALL': 'Eyeball通联' };
+        // 统一 QSO 类型显示名称：使用 "Eyeball QSO" 保持全站一致
+        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联', 'EYEBALL': 'Eyeball QSO' };
         const QSO_TYPE_ICONS = { 'NORMAL': '', 'SAT': '🛰', 'REP': '📡', 'EYEBALL': '👀' };
         const STATUS_OPTIONS = ['无法考证', '未发送', '已发送', '无需发送', '电子确认'];
         const BAND_FREQ = {
@@ -683,19 +712,27 @@
         }
 
         // 格式化频率单元格（考虑 QSO 类型，与公共查询页保持一致）
+        // 统一显示格式：频率后附加波段信息，如 "145.500 MHz (2m)"
         function formatFreqCell(log) {
             const qsoType = log.qso_type || 'NORMAL';
 
             if (qsoType === 'SAT') {
-                // 卫星通联：显示卫星名称 + 上下行频率
+                // 卫星通联：显示卫星名称 + 上下行频率（带波段）
                 let html = '';
                 if (log.sat_name) {
                     html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
                 }
                 if (log.tx_freq && log.rx_freq) {
-                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                    // 获取上下行频率对应的波段
+                    const txBand = freqToBand(log.tx_freq);
+                    const rxBand = freqToBand(log.rx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
+                    html += `<div class="text-xs">${log.tx_freq} MHz${txBandStr} ↑ / ${log.rx_freq} MHz${rxBandStr} ↓</div>`;
                 } else if (log.freq) {
-                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                    const band = log.band || freqToBand(log.freq);
+                    const bandStr = band ? ` (${band})` : '';
+                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
                 } else if (log.band) {
                     html += `<div class="text-xs">${log.band}</div>`;
                 } else {
@@ -703,12 +740,23 @@
                 }
                 return html;
             } else if (qsoType === 'REP') {
-                // 中继通联：显示上下行频率
+                // 中继通联：显示中继名称（如果有）+ 上下行频率（带波段）
                 let html = '';
+                // 显示中继名称（如果有）
+                if (log.sat_name) {
+                    html += `<div class="text-orange-600 text-xs font-medium">📡 ${log.sat_name}</div>`;
+                }
                 if (log.tx_freq && log.rx_freq) {
-                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                    // 获取上下行频率对应的波段
+                    const txBand = freqToBand(log.tx_freq);
+                    const rxBand = freqToBand(log.rx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
+                    html += `<div class="text-xs">${log.rx_freq} MHz${rxBandStr} ↓ / ${log.tx_freq} MHz${txBandStr} ↑</div>`;
                 } else if (log.freq) {
-                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                    const band = log.band || freqToBand(log.freq);
+                    const bandStr = band ? ` (${band})` : '';
+                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
                 } else if (log.band) {
                     html += `<div class="text-xs">${log.band}</div>`;
                 } else {
@@ -717,21 +765,21 @@
                 return html;
             } else if (qsoType === 'EYEBALL') {
                 // Eyeball 通联：显示 QTH（如果有）
-                if (log.comment) {
-                    return `<span class="text-gray-500 text-xs">${log.comment}</span>`;
+                if (log.qth) {
+                    return `<span class="text-gray-500 text-xs">${log.qth}</span>`;
                 }
                 return '<span class="text-gray-400 text-xs">-</span>';
             }
 
-            // 普通通联：显示频率和波段
+            // 普通通联：显示频率和波段（带波段信息）
             const freq = log.freq || '';
-            const band = log.band || '';
+            const band = log.band || (freq ? freqToBand(freq) : '');
             let html = '';
             if (freq) {
                 html += `<span class="font-medium">${freq} MHz</span>`;
             }
             if (band) {
-                html += `<span class="text-gray-400 text-xs ml-1">${band}</span>`;
+                html += `<span class="text-gray-400 text-xs ml-1">(${band})</span>`;
             }
             if (!freq && !band) {
                 html = '-';
@@ -746,6 +794,7 @@
             const normalFields = document.getElementById('addNormalFields');
             const satFields = document.getElementById('addSatFields');
             const repFields = document.getElementById('addRepFields');
+            const eyeballFields = document.getElementById('addEyeballFields');
             const timeGroup = document.getElementById('addTimeGroup');
 
             function updateFields() {
@@ -755,6 +804,7 @@
                 normalFields.classList.add('hidden');
                 satFields.classList.add('hidden');
                 repFields.classList.add('hidden');
+                eyeballFields.classList.add('hidden');
                 timeGroup.classList.remove('hidden');
 
                 if (qsoType === 'NORMAL') {
@@ -767,7 +817,8 @@
                     // 中继通联：显示上行/下行频率、中继名称、模式
                     repFields.classList.remove('hidden');
                 } else if (qsoType === 'EYEBALL') {
-                    // Eyeball 通联：隐藏时间、频率、波段、模式、RST
+                    // Eyeball 通联：显示地点字段，隐藏时间、频率、波段、模式、RST
+                    eyeballFields.classList.remove('hidden');
                     timeGroup.classList.add('hidden');
                 }
             }
@@ -992,6 +1043,18 @@
         }
 
         // ===== 渲染记录表格 =====
+        // 格式化日期：YYYYMMDD -> YYYY-MM-DD
+        function formatDate(dateStr) {
+            if (!dateStr || dateStr.length < 8) return dateStr || '-';
+            return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+        }
+
+        // 格式化时间：HHMMSS -> HH:MM:SS
+        function formatTime(timeStr) {
+            if (!timeStr || timeStr.length < 6) return timeStr || '-';
+            return `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}:${timeStr.substring(4, 6)}`;
+        }
+
         function renderLogsTable(data) {
             const tbody = document.getElementById('logsTableBody');
             const noLogs = document.getElementById('noLogs');
@@ -1012,14 +1075,17 @@
                     callHtml += ' <span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-600 ml-1">SK</span>';
                 }
 
+                // Eyeball QSO 类型标签：如果有地点信息，添加 title 悬停提示
+                const titleAttr = (log.qso_type === 'EYEBALL' && log.qth) ? ` title="${log.qth}"` : '';
+
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500">${log.id}</td>
                     <td class="px-3 py-2 font-medium">${callHtml}</td>
-                    <td class="px-3 py-2">${log.qso_date || '-'}</td>
-                    <td class="px-3 py-2">${log.time_on || '-'}</td>
+                    <td class="px-3 py-2">${formatDate(log.qso_date)}</td>
+                    <td class="px-3 py-2">${formatTime(log.time_on)}</td>
                     <td class="px-3 py-2">${formatFreqCell(log)}</td>
                     <td class="px-3 py-2">${log.mode || '-'}</td>
-                    <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}">${typeIcon} ${typeLabel}</span></td>
+                    <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}"${titleAttr}>${typeIcon} ${typeLabel}</span></td>
                     <td class="px-3 py-2">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
                     <td class="px-3 py-2"><select onchange="updateStatus(${log.id}, this.value)" class="border rounded px-2 py-1 text-xs">${statusOpts}</select></td>
                     <td class="px-3 py-2 whitespace-nowrap">
@@ -1090,6 +1156,7 @@
             const normalFields = document.getElementById('editNormalFields');
             const satFields = document.getElementById('editSatFields');
             const repFields = document.getElementById('editRepFields');
+            const eyeballFields = document.getElementById('editEyeballFields');
             const timeGroup = document.getElementById('editTimeGroup');
 
             function updateFields() {
@@ -1099,6 +1166,7 @@
                 normalFields.classList.add('hidden');
                 satFields.classList.add('hidden');
                 repFields.classList.add('hidden');
+                eyeballFields.classList.add('hidden');
                 timeGroup.classList.remove('hidden');
 
                 if (qsoType === 'NORMAL') {
@@ -1111,7 +1179,8 @@
                     // 中继通联：显示上行/下行频率、中继名称、模式
                     repFields.classList.remove('hidden');
                 } else if (qsoType === 'EYEBALL') {
-                    // Eyeball 通联：隐藏时间、频率、波段、模式、RST
+                    // Eyeball 通联：显示地点字段，隐藏时间、频率、波段、模式、RST
+                    eyeballFields.classList.remove('hidden');
                     timeGroup.classList.add('hidden');
                 }
             }
@@ -1166,8 +1235,10 @@
                 document.getElementById('editRepRxFreq').value = log.rx_freq || '';
                 document.getElementById('editRepName').value = log.sat_name || '';
                 document.getElementById('editRepMode').value = log.mode || '';
+            } else if (qsoType === 'EYEBALL') {
+                // Eyeball 通联：设置地点字段
+                document.getElementById('editQth').value = log.qth || '';
             }
-            // EYEBALL 类型不需要设置频率/模式字段
 
             // 更新频率提示
             const band = log.freq ? freqToBand(log.freq) : (log.band || '');
@@ -1217,8 +1288,10 @@
                 data.rx_freq = document.getElementById('editRepRxFreq').value.trim();
                 data.sat_name = document.getElementById('editRepName').value.trim();
                 data.mode = document.getElementById('editRepMode').value;
+            } else if (qsoType === 'EYEBALL') {
+                // Eyeball 通联：获取地点字段
+                data.qth = document.getElementById('editQth').value.trim();
             }
-            // EYEBALL 类型不需要频率、模式字段
 
             // 由后端自动推导 band
             if (data.freq) {
@@ -1284,8 +1357,10 @@
                 data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
                 data.sat_name = form.querySelector('[name="sat_name"]').value.trim();
                 data.mode = form.querySelector('[name="mode"]').value;
+            } else if (qsoType === 'EYEBALL') {
+                // Eyeball 通联：获取地点字段
+                data.qth = form.querySelector('[name="qth"]').value.trim();
             }
-            // EYEBALL 类型不需要频率、模式字段
 
             // 频率自动推导 band（后端也会做，前端先做一次用于校验）
             if (data.freq) {

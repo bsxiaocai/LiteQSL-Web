@@ -89,7 +89,7 @@
                         <option value="NORMAL">一般通联</option>
                         <option value="SAT">卫星通联 🛰</option>
                         <option value="REP">中继通联 📡</option>
-                        <option value="EYEBALL">Eyeball通联 👀</option>
+                        <option value="EYEBALL">Eyeball QSO 👀</option>
                     </select>
                 </div>
                 <button id="filterApply" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm">筛选</button>
@@ -130,7 +130,8 @@
 
     <script>
         // ===== 常量定义 =====
-        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联', 'EYEBALL': 'Eyeball通联' };
+        // 统一 QSO 类型显示名称：使用 "Eyeball QSO" 保持全站一致
+        const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联', 'EYEBALL': 'Eyeball QSO' };
         const QSO_TYPE_ICONS = { 'NORMAL': '', 'SAT': '🛰', 'REP': '📡', 'EYEBALL': '👀' };
         const BAND_FREQ = {
             '160m': '1.800-2.000', '80m': '3.500-3.900', '60m': '5.300-5.400',
@@ -170,8 +171,21 @@
             return log.band || '-';
         }
 
+        // 格式化日期：YYYYMMDD -> YYYY-MM-DD
+        function formatDate(dateStr) {
+            if (!dateStr || dateStr.length < 8) return dateStr || '-';
+            return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
+        }
+
+        // 格式化时间：HHMMSS -> HH:MM:SS
+        function formatTime(timeStr) {
+            if (!timeStr || timeStr.length < 6) return timeStr || '-';
+            return `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}:${timeStr.substring(4, 6)}`;
+        }
+
         // 格式化类型标签
-        function formatTypeBadge(qsoType) {
+        // location 参数用于 Eyeball QSO 显示地点悬停提示
+        function formatTypeBadge(qsoType, location) {
             const type = qsoType || 'NORMAL';
             const label = QSO_TYPE_LABELS[type] || '一般通联';
             const icon = QSO_TYPE_ICONS[type] || '';
@@ -180,26 +194,36 @@
             } else if (type === 'REP') {
                 return `<span class="px-2 py-1 rounded-full text-xs bg-orange-100 text-orange-700">${icon} ${label}</span>`;
             } else if (type === 'EYEBALL') {
-                return `<span class="px-2 py-1 rounded-full text-xs bg-teal-100 text-teal-700">${icon} ${label}</span>`;
+                // Eyeball QSO：如果有地点信息，添加 title 悬停提示
+                const titleAttr = location ? ` title="${location}"` : '';
+                return `<span class="px-2 py-1 rounded-full text-xs bg-teal-100 text-teal-700"${titleAttr}>${icon} ${label}</span>`;
             }
             // NORMAL 不显示标签，保持简洁
             return '';
         }
 
         // 格式化频率单元格（考虑 QSO 类型）
+        // 统一显示格式：频率后附加波段信息，如 "145.500 MHz (2m)"
         function formatFreqCell(log) {
             const qsoType = log.qso_type || 'NORMAL';
 
             if (qsoType === 'SAT') {
-                // 卫星通联：显示卫星名称 + 上下行频率
+                // 卫星通联：显示卫星名称 + 上下行频率（带波段）
                 let html = '';
                 if (log.sat_name) {
                     html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
                 }
                 if (log.tx_freq && log.rx_freq) {
-                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                    // 获取上下行频率对应的波段
+                    const txBand = freqToBand(log.tx_freq);
+                    const rxBand = freqToBand(log.rx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
+                    html += `<div class="text-xs">${log.tx_freq} MHz${txBandStr} ↑ / ${log.rx_freq} MHz${rxBandStr} ↓</div>`;
                 } else if (log.freq) {
-                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                    const band = log.band || freqToBand(log.freq);
+                    const bandStr = band ? ` (${band})` : '';
+                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
                 } else if (log.band) {
                     html += `<div class="text-xs">${log.band}</div>`;
                 } else {
@@ -207,12 +231,23 @@
                 }
                 return html;
             } else if (qsoType === 'REP') {
-                // 中继通联：显示上下行频率
+                // 中继通联：显示中继名称（如果有）+ 上下行频率（带波段）
                 let html = '';
+                // 显示中继名称（如果有）
+                if (log.sat_name) {
+                    html += `<div class="text-orange-600 text-xs font-medium">📡 ${log.sat_name}</div>`;
+                }
                 if (log.tx_freq && log.rx_freq) {
-                    html += `<div class="text-xs">${log.tx_freq} ↑ / ${log.rx_freq} ↓</div>`;
+                    // 获取上下行频率对应的波段
+                    const txBand = freqToBand(log.tx_freq);
+                    const rxBand = freqToBand(log.rx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
+                    html += `<div class="text-xs">${log.rx_freq} MHz${rxBandStr} ↓ / ${log.tx_freq} MHz${txBandStr} ↑</div>`;
                 } else if (log.freq) {
-                    html += `<div class="text-xs">${log.freq} MHz</div>`;
+                    const band = log.band || freqToBand(log.freq);
+                    const bandStr = band ? ` (${band})` : '';
+                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
                 } else if (log.band) {
                     html += `<div class="text-xs">${log.band}</div>`;
                 } else {
@@ -220,27 +255,48 @@
                 }
                 return html;
             } else if (qsoType === 'EYEBALL') {
-                // Eyeball 通联：显示备注（如果有）
-                if (log.comment) {
-                    return `<span class="text-gray-500 text-xs">${log.comment}</span>`;
+                // Eyeball 通联：显示 QTH（如果有）
+                if (log.qth) {
+                    return `<span class="text-gray-500 text-xs">${log.qth}</span>`;
                 }
                 return '<span class="text-gray-400 text-xs">-</span>';
             }
 
-            // 普通通联：显示频率和波段
+            // 普通通联：显示频率和波段（带波段信息）
             const freq = log.freq || '';
-            const band = log.band || '';
+            const band = log.band || (freq ? freqToBand(freq) : '');
             let html = '';
             if (freq) {
                 html += `<span class="font-medium">${freq} MHz</span>`;
             }
             if (band) {
-                html += `<span class="text-gray-400 text-xs ml-1">${band}</span>`;
+                html += `<span class="text-gray-400 text-xs ml-1">(${band})</span>`;
             }
             if (!freq && !band) {
                 html = '-';
             }
             return html;
+        }
+
+        // 频率转波段（前端版本，用于显示）
+        function freqToBand(freq) {
+            const f = parseFloat(freq);
+            if (isNaN(f)) return '';
+            if (f >= 1.8 && f < 2.0) return '160m';
+            if (f >= 3.5 && f < 4.0) return '80m';
+            if (f >= 5.3 && f < 5.4) return '60m';
+            if (f >= 7.0 && f < 7.3) return '40m';
+            if (f >= 10.1 && f < 10.15) return '30m';
+            if (f >= 14.0 && f < 14.35) return '20m';
+            if (f >= 18.068 && f < 18.168) return '17m';
+            if (f >= 21.0 && f < 21.45) return '15m';
+            if (f >= 24.89 && f < 25.0) return '12m';
+            if (f >= 28.0 && f < 29.7) return '10m';
+            if (f >= 50.0 && f < 54.0) return '6m';
+            if (f >= 144.0 && f < 148.0) return '2m';
+            if (f >= 430.0 && f < 440.0) return '70cm';
+            if (f >= 1240.0 && f < 1300.0) return '23cm';
+            return '';
         }
 
         function rowHtml(log) {
@@ -252,11 +308,11 @@
 
             return `<tr class="border-b hover:bg-gray-50">
                 <td class="px-4 py-2 font-medium">${callHtml}</td>
-                <td class="px-4 py-2">${log.qso_date || '-'}</td>
-                <td class="px-4 py-2">${log.time_on || '-'}</td>
+                <td class="px-4 py-2">${formatDate(log.qso_date)}</td>
+                <td class="px-4 py-2">${formatTime(log.time_on)}</td>
                 <td class="px-4 py-2 text-gray-600">${formatFreqCell(log)}</td>
                 <td class="px-4 py-2">${log.mode || '-'}</td>
-                <td class="px-4 py-2">${formatTypeBadge(log.qso_type)}</td>
+                <td class="px-4 py-2">${formatTypeBadge(log.qso_type, log.qth)}</td>
                 <td class="px-4 py-2">${log.rst_sent || '-'}</td>
                 <td class="px-4 py-2">${log.rst_rcvd || '-'}</td>
                 <td class="px-4 py-2"><span class="px-2 py-1 rounded-full text-xs ${statusColor(log.qsl_status)}">${log.qsl_status}</span></td>
