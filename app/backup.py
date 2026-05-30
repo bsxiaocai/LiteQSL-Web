@@ -52,9 +52,9 @@ def list_backups() -> list[dict]:
 def get_backup_path(filename: str) -> str | None:
     """
     校验备份文件名（防路径穿越），返回完整路径或 None。
-    文件名仅允许字母、数字、下划线，扩展名必须为 .db。
+    文件名仅允许字母、数字、下划线，扩展名必须为 .db，长度限制 50 字符。
     """
-    if not re.match(r"^[a-zA-Z0-9_]+\.db$", filename):
+    if len(filename) > 50 or not re.match(r"^[a-zA-Z0-9_]+\.db$", filename):
         return None
     path = os.path.join(BACKUP_DIR, filename)
     if not os.path.isfile(path):

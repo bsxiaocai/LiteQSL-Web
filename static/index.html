@@ -453,6 +453,10 @@
         });
 
         // ===== 搜索 =====
+        // 搜索框自动转大写
+        document.getElementById('searchInput').addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
         document.getElementById('searchForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const call = document.getElementById('searchInput').value.trim();

@@ -931,6 +931,36 @@
         // 初始化录入表单的类型切换
         const updateAddFormFields = setupAddFormTypeToggle();
 
+        // ===== 日期字段默认值：设置为今天 =====
+        function setTodayDate(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input.value) {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                input.value = `${yyyy}-${mm}-${dd}`;
+            }
+        }
+        // 录入表单日期默认今天
+        setTodayDate(null); // 需要用 name 选择器
+        const addDateInput = document.querySelector('#addForm [name="qso_date"]');
+        if (addDateInput && !addDateInput.value) {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            addDateInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+
+        // ===== 呼号自动转大写 =====
+        document.querySelector('[name="call"]').addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
+        document.getElementById('editCall').addEventListener('input', function() {
+            this.value = this.value.toUpperCase();
+        });
+
         // ===== 动态绑定录入表单 RST blur 校验（跟随 QSO 类型切换） =====
         function bindAddFormRstValidation() {
             const qsoType = document.getElementById('qsoTypeSelect').value;
@@ -1206,6 +1236,9 @@
                 // Eyeball QSO 只有日期没有具体时间，显示 "-"
                 const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
 
+                // Eyeball QSO 没有 RST，显示 "-"
+                const rstDisplay = log.qso_type === 'EYEBALL' ? '-' : `${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}`;
+
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500 text-center whitespace-nowrap">${log.id}</td>
                     <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
@@ -1214,7 +1247,7 @@
                     <td class="px-3 py-2">${formatFreqCell(log)}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${log.mode || '-'}</td>
                     <td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}"${titleAttr}>${typeIcon} ${typeLabel}</span></td>
-                    <td class="px-3 py-2 text-center whitespace-nowrap">${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}</td>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">${rstDisplay}</td>
                     <td class="px-3 py-2 whitespace-nowrap"><select onchange="updateStatus(${log.id}, this.value)" class="border rounded px-2 py-1 text-xs">${statusOpts}</select></td>
                     <td class="px-3 py-2 whitespace-nowrap">
                         <button onclick="openEditModal(${log.id})" class="text-blue-600 hover:text-blue-800 text-xs mr-2">编辑</button>
@@ -1272,7 +1305,9 @@
 
         // ===== 删除记录 =====
         function deleteLog(id) {
-            if (!confirm('确定删除这条记录？')) return;
+            const log = allLogs.find(l => l.id === id);
+            const info = log ? `（${log.call} - ${formatDate(log.qso_date)}）` : '';
+            if (!confirm(`确定删除这条记录${info}？`)) return;
             fetch(`/api/admin/logs/${id}`, {method: 'DELETE'})
                 .then(r => { if (r.ok) { showToast('记录已删除', 'success'); loadLogs(); } else showToast('删除失败', 'error'); })
                 .catch(() => showToast('删除失败', 'error'));
@@ -1286,9 +1321,23 @@
             const repFields = document.getElementById('editRepFields');
             const eyeballFields = document.getElementById('editEyeballFields');
             const timeGroup = document.getElementById('editTimeGroup');
+            let previousType = typeSelect.value; // 记录切换前的类型
 
             function updateFields() {
                 const qsoType = typeSelect.value;
+
+                // 从非 EYEBALL 切换到 EYEBALL 时，提示用户将清除无关字段
+                if (qsoType === 'EYEBALL' && previousType !== 'EYEBALL') {
+                    const hasData = document.getElementById('editFreq').value ||
+                                    document.getElementById('editMode').value ||
+                                    document.getElementById('editRstSent').value ||
+                                    document.getElementById('editTimeOn').value;
+                    if (hasData && !confirm('切换到 Eyeball QSO 将清除时间、频率、模式、RST 等字段，是否继续？')) {
+                        typeSelect.value = previousType;
+                        return;
+                    }
+                }
+                previousType = qsoType;
 
                 // 隐藏所有特殊字段
                 normalFields.classList.add('hidden');
@@ -1554,14 +1603,32 @@
                                 data.force = true;
                                 setLoading(btn, true);
                                 fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
-                                    .then(r2 => r2.json()).then(() => { form.reset(); updateAddFormFields(); loadLogs(); showToast('记录已添加', 'success'); setLoading(btn, false); })
+                                    .then(r2 => r2.json()).then(() => {
+                                        const savedType = document.getElementById('qsoTypeSelect').value;
+                                        form.reset();
+                                        document.getElementById('qsoTypeSelect').value = savedType;
+                                        updateAddFormFields();
+                                        loadLogs();
+                                        showToast('记录已添加', 'success');
+                                        setLoading(btn, false);
+                                    })
                                     .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
                             }
                         });
                         return;
                     }
                     return r.json();
-                }).then(result => { setLoading(btn, false); if (result && result.ok) { form.reset(); updateAddFormFields(); loadLogs(); showToast('QSO 添加成功', 'success'); } })
+                }).then(result => {
+                    setLoading(btn, false);
+                    if (result && result.ok) {
+                        const savedType = document.getElementById('qsoTypeSelect').value;
+                        form.reset();
+                        document.getElementById('qsoTypeSelect').value = savedType;
+                        updateAddFormFields();
+                        loadLogs();
+                        showToast('QSO 添加成功', 'success');
+                    }
+                })
                 .catch(() => { setLoading(btn, false); showToast('添加失败', 'error'); });
         });
 

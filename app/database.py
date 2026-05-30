@@ -202,7 +202,12 @@ def _auto_fill_freq_band(data: dict) -> dict:
     - 如果有 freq 但没有 band → 自动计算 band
     - 如果有 band 但没有 freq → 保留 band（兼容旧数据和 ADIF 导入）
     - 如果两者都有 → 以 freq 为准重新计算 band
+    - 呼号自动转大写
     """
+    # 呼号自动转大写
+    if data.get("call"):
+        data["call"] = data["call"].strip().upper()
+
     freq = data.get("freq", "")
     band = data.get("band", "")
 
@@ -285,15 +290,6 @@ def insert_logs_batch(records: list[dict]) -> int:
     return count
 
 
-def get_recent_logs(limit: int = 20) -> list[dict]:
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC LIMIT ?", (limit,)
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
 def search_logs_by_call(call: str) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
@@ -307,6 +303,33 @@ def search_logs_by_call(call: str) -> list[dict]:
 def get_all_logs() -> list[dict]:
     conn = get_conn()
     rows = conn.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_all_logs_filtered(filters: dict = None) -> list[dict]:
+    """获取所有通联记录，支持可选的筛选条件（用于导出）"""
+    conditions = ["1=1"]
+    params = []
+    if filters:
+        if filters.get("call"):
+            conditions.append("call LIKE ? ESCAPE '\\'")
+            params.append(f"%{_escape_like(filters['call'])}%")
+        if filters.get("band"):
+            conditions.append("band = ?")
+            params.append(filters["band"])
+        if filters.get("mode"):
+            conditions.append("mode = ?")
+            params.append(filters["mode"])
+        if filters.get("qsl_status"):
+            conditions.append("qsl_status = ?")
+            params.append(filters["qsl_status"])
+        if filters.get("qso_type"):
+            conditions.append("qso_type = ?")
+            params.append(filters["qso_type"])
+    where = " AND ".join(conditions)
+    conn = get_conn()
+    rows = conn.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -411,6 +434,17 @@ def check_duplicate(call: str, qso_date: str, time_on: str, band: str, mode: str
     return dict(row) if row else None
 
 
+def check_duplicate_eyeball(call: str, qso_date: str) -> dict | None:
+    """检测是否存在重复的 Eyeball QSO 记录（呼号+日期判定）"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND qso_type = 'EYEBALL' LIMIT 1",
+        (call, qso_date),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def check_duplicates_batch(records: list[dict]) -> list[dict]:
     """批量检测重复记录，返回重复记录列表"""
     duplicates = []
@@ -447,7 +481,7 @@ def export_csv(records: list[dict]) -> str:
     writer.writerow([
         "CALL", "DATE", "TIME", "BAND", "FREQ", "MODE",
         "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT",
-        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME", "IS_SK",
+        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME", "IS_SK", "QTH",
     ])
     for rec in records:
         # 优先使用记录中存储的 freq，如果没有则从 BAND_FREQ_MAP 推导
@@ -468,6 +502,7 @@ def export_csv(records: list[dict]) -> str:
             rec.get("rx_freq", ""),
             rec.get("sat_name", ""),
             rec.get("is_sk", 0),
+            rec.get("qth", ""),
         ])
     return output.getvalue()
 

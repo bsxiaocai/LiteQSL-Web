@@ -9,11 +9,13 @@ from app.database import (
     update_qsl_status,
     delete_log,
     get_all_logs,
+    get_all_logs_filtered,
     get_logs_paginated,
     insert_logs_batch,
     get_user,
     update_password,
     check_duplicate,
+    check_duplicate_eyeball,
     check_duplicates_batch,
     export_csv,
     complete_first_login,
@@ -143,12 +145,12 @@ async def complete_first_login_endpoint(request: Request):
     if new_password != confirm_password:
         raise HTTPException(status_code=400, detail="两次输入的密码不一致")
 
-    # 更新
+    # 更新（先更新数据库，成功后再更新 session）
     new_hash = hash_password(new_password)
     if not complete_first_login(username, new_username, new_hash):
         raise HTTPException(status_code=400, detail="新用户名已被占用")
 
-    # 更新 session
+    # 数据库更新成功后才更新 session
     request.session["username"] = new_username
     return {"ok": True}
 
@@ -203,8 +205,16 @@ async def add_log(request: Request):
 
     # 重复检测（force=true 时跳过）
     if not data.get("force"):
-        # 需要 band 来做重复检测
-        if data.get("band"):
+        if qso_type == "EYEBALL":
+            # Eyeball QSO：按呼号+日期检测重复
+            existing = check_duplicate_eyeball(data["call"], data["qso_date"])
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} 的 Eyeball QSO 记录 (ID: {existing['id']})",
+                )
+        elif data.get("band"):
+            # 其他类型：按五字段检测重复
             existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data.get("mode", ""))
             if existing:
                 raise HTTPException(
@@ -219,6 +229,28 @@ async def add_log(request: Request):
 async def edit_log(log_id: int, request: Request):
     require_admin(request)
     data = await request.json()
+
+    # 校验必填字段
+    if not data.get("call"):
+        raise HTTPException(status_code=400, detail="呼号不能为空")
+    if not data.get("qso_date"):
+        raise HTTPException(status_code=400, detail="日期不能为空")
+
+    qso_type = data.get("qso_type", "NORMAL")
+    if qso_type == "EYEBALL":
+        # Eyeball QSO 只需要呼号、日期、卡片状态
+        required_fields = ["call", "qso_date", "qsl_status"]
+    elif qso_type == "SAT":
+        required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+    elif qso_type == "REP":
+        required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+    else:
+        required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+
+    for field in required_fields:
+        if not data.get(field):
+            raise HTTPException(status_code=400, detail=f"{field} 不能为空")
+
     if not update_log(log_id, data):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
@@ -278,7 +310,11 @@ async def import_adif(request: Request):
     force = form.get("force", "false").lower() == "true"
     if not file:
         raise HTTPException(status_code=400, detail="请上传文件")
+    # 文件大小限制：10MB
+    MAX_FILE_SIZE = 10 * 1024 * 1024
     content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="文件大小超过限制（最大 10MB）")
     text = content.decode("utf-8", errors="ignore")
     records = parse_adif(text)
     if not records:
@@ -327,10 +363,7 @@ def export_csv_file(
         filters["qsl_status"] = qsl_status
     if qso_type:
         filters["qso_type"] = qso_type
-    if filters:
-        records = get_logs_paginated(filters, page=1, page_size=99999)["logs"]
-    else:
-        records = get_all_logs()
+    records = get_all_logs_filtered(filters if filters else None)
     content = export_csv(records)
     filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.csv"
     return Response(
