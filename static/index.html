@@ -231,8 +231,8 @@
                 const titleAttr = location ? ` title="${location}"` : '';
                 return `<span class="px-2 py-1 rounded-full text-xs bg-teal-100 text-teal-700"${titleAttr}>${icon} ${label}</span>`;
             }
-            // NORMAL 不显示标签，保持简洁
-            return '';
+            // NORMAL：显示一般通联标签
+            return `<span class="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-600">${label}</span>`;
         }
 
         // 格式化频率单元格（考虑 QSO 类型）
@@ -241,50 +241,65 @@
             const qsoType = log.qso_type || 'NORMAL';
 
             if (qsoType === 'SAT') {
-                // 卫星通联：显示卫星名称 + 上下行频率（带波段）
+                // 卫星通联：三行显示
+                // 第一行：卫星名称
+                // 第二行：下行频率和波段
+                // 第三行：上行频率和波段
                 let html = '';
                 if (log.sat_name) {
                     html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
                 }
-                if (log.tx_freq && log.rx_freq) {
-                    // 获取上下行频率对应的波段
-                    const txBand = freqToBand(log.tx_freq);
+                if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
                     const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-xs">${log.tx_freq} MHz${txBandStr} ↑ / ${log.rx_freq} MHz${rxBandStr} ↓</div>`;
-                } else if (log.freq) {
-                    const band = log.band || freqToBand(log.freq);
-                    const bandStr = band ? ` (${band})` : '';
-                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
-                } else if (log.band) {
-                    html += `<div class="text-xs">${log.band}</div>`;
-                } else {
-                    html = '-';
+                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                }
+                if (log.tx_freq) {
+                    const txBand = freqToBand(log.tx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                }
+                if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
+                    if (log.freq) {
+                        const band = log.band || freqToBand(log.freq);
+                        const bandStr = band ? ` (${band})` : '';
+                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                    } else if (log.band) {
+                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                    } else {
+                        html = '-';
+                    }
                 }
                 return html;
             } else if (qsoType === 'REP') {
-                // 中继通联：显示中继名称（如果有）+ 上下行频率（带波段）
+                // 中继通联：三行显示
+                // 第一行：中继名称
+                // 第二行：下行频率和波段
+                // 第三行：上行频率和波段
                 let html = '';
-                // 显示中继名称（如果有）
                 if (log.sat_name) {
                     html += `<div class="text-orange-600 text-xs font-medium">📡 ${log.sat_name}</div>`;
                 }
-                if (log.tx_freq && log.rx_freq) {
-                    // 获取上下行频率对应的波段
-                    const txBand = freqToBand(log.tx_freq);
+                if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
                     const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-xs">${log.rx_freq} MHz${rxBandStr} ↓ / ${log.tx_freq} MHz${txBandStr} ↑</div>`;
-                } else if (log.freq) {
-                    const band = log.band || freqToBand(log.freq);
-                    const bandStr = band ? ` (${band})` : '';
-                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
-                } else if (log.band) {
-                    html += `<div class="text-xs">${log.band}</div>`;
-                } else {
-                    html = '-';
+                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                }
+                if (log.tx_freq) {
+                    const txBand = freqToBand(log.tx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                }
+                if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
+                    if (log.freq) {
+                        const band = log.band || freqToBand(log.freq);
+                        const bandStr = band ? ` (${band})` : '';
+                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                    } else if (log.band) {
+                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                    } else {
+                        html = '-';
+                    }
                 }
                 return html;
             } else if (qsoType === 'EYEBALL') {
@@ -300,10 +315,10 @@
             const band = log.band || (freq ? freqToBand(freq) : '');
             let html = '';
             if (freq) {
-                html += `<span class="font-medium">${freq} MHz</span>`;
+                html += `<span class="text-gray-700">${freq} MHz</span>`;
             }
             if (band) {
-                html += `<span class="text-gray-400 text-xs ml-1">(${band})</span>`;
+                html += `<span class="text-gray-500 text-xs ml-1">(${band})</span>`;
             }
             if (!freq && !band) {
                 html = '-';

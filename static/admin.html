@@ -226,6 +226,16 @@
                                         <option>SSTV</option><option>DIGITAL</option>
                                     </select>
                                 </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
+                                    <input type="text" name="rst_sent" placeholder="59"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
+                                    <input type="text" name="rst_rcvd" placeholder="59"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -574,6 +584,16 @@
                                     <option>SSTV</option><option>DIGITAL</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
+                                <input type="text" id="editRepRstSent" placeholder="59"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">RST 接收</label>
+                                <input type="text" id="editRepRstRcvd" placeholder="59"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -745,50 +765,65 @@
             const qsoType = log.qso_type || 'NORMAL';
 
             if (qsoType === 'SAT') {
-                // 卫星通联：显示卫星名称 + 上下行频率（带波段）
+                // 卫星通联：三行显示
+                // 第一行：卫星名称
+                // 第二行：下行频率和波段
+                // 第三行：上行频率和波段
                 let html = '';
                 if (log.sat_name) {
                     html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
                 }
-                if (log.tx_freq && log.rx_freq) {
-                    // 获取上下行频率对应的波段
-                    const txBand = freqToBand(log.tx_freq);
+                if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
                     const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-xs">${log.tx_freq} MHz${txBandStr} ↑ / ${log.rx_freq} MHz${rxBandStr} ↓</div>`;
-                } else if (log.freq) {
-                    const band = log.band || freqToBand(log.freq);
-                    const bandStr = band ? ` (${band})` : '';
-                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
-                } else if (log.band) {
-                    html += `<div class="text-xs">${log.band}</div>`;
-                } else {
-                    html = '-';
+                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                }
+                if (log.tx_freq) {
+                    const txBand = freqToBand(log.tx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                }
+                if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
+                    if (log.freq) {
+                        const band = log.band || freqToBand(log.freq);
+                        const bandStr = band ? ` (${band})` : '';
+                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                    } else if (log.band) {
+                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                    } else {
+                        html = '-';
+                    }
                 }
                 return html;
             } else if (qsoType === 'REP') {
-                // 中继通联：显示中继名称（如果有）+ 上下行频率（带波段）
+                // 中继通联：三行显示
+                // 第一行：中继名称
+                // 第二行：下行频率和波段
+                // 第三行：上行频率和波段
                 let html = '';
-                // 显示中继名称（如果有）
                 if (log.sat_name) {
                     html += `<div class="text-orange-600 text-xs font-medium">📡 ${log.sat_name}</div>`;
                 }
-                if (log.tx_freq && log.rx_freq) {
-                    // 获取上下行频率对应的波段
-                    const txBand = freqToBand(log.tx_freq);
+                if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
                     const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-xs">${log.rx_freq} MHz${rxBandStr} ↓ / ${log.tx_freq} MHz${txBandStr} ↑</div>`;
-                } else if (log.freq) {
-                    const band = log.band || freqToBand(log.freq);
-                    const bandStr = band ? ` (${band})` : '';
-                    html += `<div class="text-xs">${log.freq} MHz${bandStr}</div>`;
-                } else if (log.band) {
-                    html += `<div class="text-xs">${log.band}</div>`;
-                } else {
-                    html = '-';
+                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                }
+                if (log.tx_freq) {
+                    const txBand = freqToBand(log.tx_freq);
+                    const txBandStr = txBand ? ` (${txBand})` : '';
+                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                }
+                if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
+                    if (log.freq) {
+                        const band = log.band || freqToBand(log.freq);
+                        const bandStr = band ? ` (${band})` : '';
+                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                    } else if (log.band) {
+                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                    } else {
+                        html = '-';
+                    }
                 }
                 return html;
             } else if (qsoType === 'EYEBALL') {
@@ -804,10 +839,10 @@
             const band = log.band || (freq ? freqToBand(freq) : '');
             let html = '';
             if (freq) {
-                html += `<span class="font-medium">${freq} MHz</span>`;
+                html += `<span class="text-gray-700">${freq} MHz</span>`;
             }
             if (band) {
-                html += `<span class="text-gray-400 text-xs ml-1">(${band})</span>`;
+                html += `<span class="text-gray-500 text-xs ml-1">(${band})</span>`;
             }
             if (!freq && !band) {
                 html = '-';
@@ -1263,6 +1298,8 @@
                 document.getElementById('editRepRxFreq').value = log.rx_freq || '';
                 document.getElementById('editRepName').value = log.sat_name || '';
                 document.getElementById('editRepMode').value = log.mode || '';
+                document.getElementById('editRepRstSent').value = log.rst_sent || '';
+                document.getElementById('editRepRstRcvd').value = log.rst_rcvd || '';
             } else if (qsoType === 'EYEBALL') {
                 // Eyeball 通联：设置地点字段
                 document.getElementById('editQth').value = log.qth || '';
@@ -1316,6 +1353,8 @@
                 data.rx_freq = document.getElementById('editRepRxFreq').value.trim();
                 data.sat_name = document.getElementById('editRepName').value.trim();
                 data.mode = document.getElementById('editRepMode').value;
+                data.rst_sent = document.getElementById('editRepRstSent').value.trim();
+                data.rst_rcvd = document.getElementById('editRepRstRcvd').value.trim();
             } else if (qsoType === 'EYEBALL') {
                 // Eyeball 通联：获取地点字段
                 data.qth = document.getElementById('editQth').value.trim();
@@ -1334,7 +1373,7 @@
             } else if (qsoType === 'SAT') {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
             } else if (qsoType === 'REP') {
-                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
+                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             }
@@ -1385,6 +1424,8 @@
                 data.rx_freq = form.querySelector('[name="rx_freq"]').value.trim();
                 data.sat_name = form.querySelector('[name="sat_name"]').value.trim();
                 data.mode = form.querySelector('[name="mode"]').value;
+                data.rst_sent = form.querySelector('[name="rst_sent"]').value.trim();
+                data.rst_rcvd = form.querySelector('[name="rst_rcvd"]').value.trim();
             } else if (qsoType === 'EYEBALL') {
                 // Eyeball 通联：获取地点字段
                 data.qth = form.querySelector('[name="qth"]').value.trim();
@@ -1403,7 +1444,7 @@
             } else if (qsoType === 'SAT') {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',sat_name:'卫星名称',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
             } else if (qsoType === 'REP') {
-                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',qsl_status:'卡片状态'};
+                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             }

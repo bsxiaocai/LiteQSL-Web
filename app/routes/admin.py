@@ -185,8 +185,8 @@ async def add_log(request: Request):
         # 卫星通联：需要呼号、日期、时间、卫星名称、上行/下行频率、模式
         required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "qsl_status"]
     elif qso_type == "REP":
-        # 中继通联：需要呼号、日期、时间、上行/下行频率、模式
-        required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "qsl_status"]
+        # 中继通联：需要呼号、日期、时间、上行/下行频率、模式、RST
+        required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
     else:
         # 标准通联：需要所有字段
         required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
