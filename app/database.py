@@ -288,7 +288,7 @@ def insert_logs_batch(records: list[dict]) -> int:
 def get_recent_logs(limit: int = 20) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,)
+        "SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC LIMIT ?", (limit,)
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -306,7 +306,7 @@ def search_logs_by_call(call: str) -> list[dict]:
 
 def get_all_logs() -> list[dict]:
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM logs ORDER BY id DESC").fetchall()
+    rows = conn.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -388,7 +388,7 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
     total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
     offset = (page - 1) * page_size
     rows = conn.execute(
-        f"SELECT * FROM logs WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
         params + [page_size, offset],
     ).fetchall()
     conn.close()
@@ -511,7 +511,7 @@ def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str 
     total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
     offset = (page - 1) * page_size
     rows = conn.execute(
-        f"SELECT * FROM logs WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
         params + [page_size, offset],
     ).fetchall()
     conn.close()
