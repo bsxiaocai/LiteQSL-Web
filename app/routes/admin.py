@@ -1,7 +1,10 @@
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import Response, FileResponse
-from app.auth import check_admin, require_admin, verify_password, hash_password, validate_password_strength
+from app.auth import (
+    check_admin, require_admin, verify_password, hash_password,
+    validate_password_strength, generate_csrf_token, validate_csrf_token,
+)
 from app.rate_limit import get_client_ip, check_rate_limit, record_failure, clear_attempts
 from app.database import (
     insert_log,
@@ -28,6 +31,14 @@ from app.adif_parser import parse_adif, export_adif
 from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/csrf-token")
+def get_csrf_token(request: Request):
+    """获取 CSRF Token（需先登录，首次登录期间也可用）"""
+    require_admin(request, allow_first_login=True)
+    token = generate_csrf_token(request)
+    return {"csrf_token": token}
 
 
 @router.post("/login")
@@ -65,6 +76,7 @@ async def login(request: Request):
         new_hash = hash_password(password)
         update_password(username, new_hash)
     request.session["username"] = username
+    request.session["password_version"] = user.get("password_version", 1)
     return {"ok": True, "first_login": bool(user.get("first_login", 0))}
 
 
@@ -85,6 +97,7 @@ def check_login(request: Request):
 @router.post("/change-password")
 async def change_password(request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     body = await request.json()
     old_password = body.get("old_password", "")
     new_password = body.get("new_password", "")
@@ -105,7 +118,7 @@ async def change_password(request: Request):
 
 @router.get("/first-login-status")
 def first_login_status(request: Request):
-    require_admin(request)
+    require_admin(request, allow_first_login=True)
     user = get_user(request.session["username"])
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
@@ -114,7 +127,8 @@ def first_login_status(request: Request):
 
 @router.post("/complete-first-login")
 async def complete_first_login_endpoint(request: Request):
-    require_admin(request)
+    require_admin(request, allow_first_login=True)
+    validate_csrf_token(request)
     body = await request.json()
     old_password = body.get("old_password", "")
     new_username = body.get("new_username", "").strip()
@@ -152,6 +166,10 @@ async def complete_first_login_endpoint(request: Request):
 
     # 数据库更新成功后才更新 session
     request.session["username"] = new_username
+    # 更新 session 中的密码版本（complete_first_login 不经过 update_password，手动+1）
+    user_after = get_user(new_username)
+    if user_after:
+        request.session["password_version"] = user_after.get("password_version", 1)
     return {"ok": True}
 
 
@@ -171,6 +189,7 @@ def get_qso_types():
 @router.post("/logs")
 async def add_log(request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     data = await request.json()
 
     # 设置默认 qso_type
@@ -206,21 +225,24 @@ async def add_log(request: Request):
     # 重复检测（force=true 时跳过）
     if not data.get("force"):
         if qso_type == "EYEBALL":
-            # Eyeball QSO：按呼号+日期检测重复
             existing = check_duplicate_eyeball(data["call"], data["qso_date"])
             if existing:
                 raise HTTPException(
                     status_code=409,
                     detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} 的 Eyeball QSO 记录 (ID: {existing['id']})",
                 )
-        elif data.get("band"):
-            # 其他类型：按五字段检测重复
-            existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], data["band"], data.get("mode", ""))
-            if existing:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {data['band']} {data.get('mode', '')} 的记录 (ID: {existing['id']})",
-                )
+        else:
+            # 其他类型：按五字段检测重复（band 为空时用 freq 兜底）
+            band_for_check = data.get("band", "")
+            if not band_for_check and data.get("freq"):
+                band_for_check = freq_to_band(data["freq"])
+            if band_for_check:
+                existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], band_for_check, data.get("mode", ""))
+                if existing:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {band_for_check} {data.get('mode', '')} 的记录 (ID: {existing['id']})",
+                    )
     log_id = insert_log(data)
     return {"ok": True, "id": log_id}
 
@@ -228,6 +250,7 @@ async def add_log(request: Request):
 @router.put("/logs/{log_id}")
 async def edit_log(log_id: int, request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     data = await request.json()
 
     # 校验必填字段
@@ -245,7 +268,7 @@ async def edit_log(log_id: int, request: Request):
     elif qso_type == "REP":
         required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
     else:
-        required_fields = ["call", "qso_date", "time_on", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
+        required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
     for field in required_fields:
         if not data.get(field):
@@ -259,6 +282,7 @@ async def edit_log(log_id: int, request: Request):
 @router.put("/logs/{log_id}/status")
 async def change_status(log_id: int, request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     body = await request.json()
     status = body.get("qsl_status", "")
     if status not in QSL_STATUSES:
@@ -271,6 +295,7 @@ async def change_status(log_id: int, request: Request):
 @router.delete("/logs/{log_id}")
 async def remove_log(log_id: int, request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     if not delete_log(log_id):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
@@ -305,6 +330,7 @@ def list_all_logs(
 @router.post("/import-adif")
 async def import_adif(request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     form = await request.form()
     file = form.get("file")
     force = form.get("force", "false").lower() == "true"
@@ -315,7 +341,16 @@ async def import_adif(request: Request):
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="文件大小超过限制（最大 10MB）")
-    text = content.decode("utf-8", errors="ignore")
+    # 尝试多种编码解码（UTF-8 优先，GBK/GB2312 兜底，避免静默丢弃数据）
+    text = None
+    for encoding in ("utf-8", "gbk", "gb2312", "latin-1"):
+        try:
+            text = content.decode(encoding)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if text is None:
+        raise HTTPException(status_code=400, detail="文件编码无法识别，请使用 UTF-8 或 GBK 编码")
     records = parse_adif(text)
     if not records:
         raise HTTPException(status_code=400, detail="未解析到有效记录")
@@ -378,6 +413,7 @@ def export_csv_file(
 @router.post("/backup")
 def backup_database(request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     result = create_backup()
     return {"ok": True, "backup": result}
 
@@ -404,6 +440,7 @@ def download_backup(filename: str, request: Request):
 @router.delete("/backups/{filename}")
 def remove_backup(filename: str, request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     if not delete_backup(filename):
         raise HTTPException(status_code=404, detail="备份文件不存在")
     return {"ok": True}
@@ -412,6 +449,7 @@ def remove_backup(filename: str, request: Request):
 @router.post("/restore")
 async def restore_database(request: Request):
     require_admin(request)
+    validate_csrf_token(request)
     body = await request.json()
     filename = body.get("filename", "")
     if not filename:
@@ -419,4 +457,6 @@ async def restore_database(request: Request):
     result = restore_backup(filename)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["detail"])
+    # 恢复后清除 session，强制重新登录（恢复的数据库可能有不同的用户/密码）
+    request.session.clear()
     return result

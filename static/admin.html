@@ -709,6 +709,12 @@
 
     <script>
         // ===== 常量定义 =====
+        // XSS 防护：转义 HTML 特殊字符
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
         // 统一 QSO 类型显示名称：使用 "Eyeball QSO" 保持全站一致
         const QSO_TYPE_LABELS = { 'NORMAL': '一般通联', 'SAT': '卫星通联', 'REP': '中继通联', 'EYEBALL': 'Eyeball QSO' };
         const QSO_TYPE_ICONS = { 'NORMAL': '', 'SAT': '🛰', 'REP': '📡', 'EYEBALL': '👀' };
@@ -733,7 +739,7 @@
             const icons = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
             const toast = document.createElement('div');
             toast.className = `flex items-center gap-3 px-4 py-3 rounded-lg border-l-4 shadow-lg ${colors[type]} transform translate-x-full opacity-0 transition-all duration-300`;
-            toast.innerHTML = `<span class="text-lg">${icons[type]}</span><span class="flex-1 text-sm">${message}</span><button onclick="this.parentElement.remove()" class="text-current opacity-50 hover:opacity-100 text-lg leading-none">&times;</button>`;
+            toast.innerHTML = `<span class="text-lg">${icons[type]}</span><span class="flex-1 text-sm">${escapeHtml(message)}</span><button onclick="this.parentElement.remove()" class="text-current opacity-50 hover:opacity-100 text-lg leading-none">&times;</button>`;
             container.appendChild(toast);
             requestAnimationFrame(() => toast.classList.remove('translate-x-full', 'opacity-0'));
             setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 3500);
@@ -774,9 +780,9 @@
 
         // 格式化频率显示：如果有 freq 字段显示 freq，否则显示 band 范围
         function formatFreqDisplay(log) {
-            if (log.freq) return log.freq + ' MHz';
-            if (log.band && BAND_FREQ[log.band]) return BAND_FREQ[log.band] + ' MHz';
-            return log.band || '-';
+            if (log.freq) return escapeHtml(log.freq) + ' MHz';
+            if (log.band && BAND_FREQ[log.band]) return escapeHtml(BAND_FREQ[log.band]) + ' MHz';
+            return escapeHtml(log.band) || '-';
         }
 
         // 格式化频率单元格（考虑 QSO 类型，与公共查询页保持一致）
@@ -786,30 +792,27 @@
 
             if (qsoType === 'SAT') {
                 // 卫星通联：三行显示
-                // 第一行：卫星名称
-                // 第二行：下行频率和波段
-                // 第三行：上行频率和波段
                 let html = '';
                 if (log.sat_name) {
-                    html += `<div class="text-purple-600 text-xs font-medium">🛰 ${log.sat_name}</div>`;
+                    html += `<div class="text-purple-600 text-xs font-medium">🛰 ${escapeHtml(log.sat_name)}</div>`;
                 }
                 if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                    const rxBandStr = rxBand ? ` (${escapeHtml(rxBand)})` : '';
+                    html += `<div class="text-gray-600 text-xs">${escapeHtml(log.rx_freq)} MHz${rxBandStr} ↓</div>`;
                 }
                 if (log.tx_freq) {
                     const txBand = freqToBand(log.tx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
-                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                    const txBandStr = txBand ? ` (${escapeHtml(txBand)})` : '';
+                    html += `<div class="text-gray-600 text-xs">${escapeHtml(log.tx_freq)} MHz${txBandStr} ↑</div>`;
                 }
                 if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
                     if (log.freq) {
                         const band = log.band || freqToBand(log.freq);
-                        const bandStr = band ? ` (${band})` : '';
-                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                        const bandStr = band ? ` (${escapeHtml(band)})` : '';
+                        html = `<div class="text-gray-600 text-xs">${escapeHtml(log.freq)} MHz${bandStr}</div>`;
                     } else if (log.band) {
-                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                        html = `<div class="text-gray-600 text-xs">${escapeHtml(log.band)}</div>`;
                     } else {
                         html = '-';
                     }
@@ -817,52 +820,49 @@
                 return html;
             } else if (qsoType === 'REP') {
                 // 中继通联：三行显示
-                // 第一行：中继名称
-                // 第二行：下行频率和波段
-                // 第三行：上行频率和波段
                 let html = '';
                 if (log.sat_name) {
-                    html += `<div class="text-orange-600 text-xs font-medium">📡 ${log.sat_name}</div>`;
+                    html += `<div class="text-orange-600 text-xs font-medium">📡 ${escapeHtml(log.sat_name)}</div>`;
                 }
                 if (log.rx_freq) {
                     const rxBand = freqToBand(log.rx_freq);
-                    const rxBandStr = rxBand ? ` (${rxBand})` : '';
-                    html += `<div class="text-gray-600 text-xs">${log.rx_freq} MHz${rxBandStr} ↓</div>`;
+                    const rxBandStr = rxBand ? ` (${escapeHtml(rxBand)})` : '';
+                    html += `<div class="text-gray-600 text-xs">${escapeHtml(log.rx_freq)} MHz${rxBandStr} ↓</div>`;
                 }
                 if (log.tx_freq) {
                     const txBand = freqToBand(log.tx_freq);
-                    const txBandStr = txBand ? ` (${txBand})` : '';
-                    html += `<div class="text-gray-600 text-xs">${log.tx_freq} MHz${txBandStr} ↑</div>`;
+                    const txBandStr = txBand ? ` (${escapeHtml(txBand)})` : '';
+                    html += `<div class="text-gray-600 text-xs">${escapeHtml(log.tx_freq)} MHz${txBandStr} ↑</div>`;
                 }
                 if (!log.sat_name && !log.rx_freq && !log.tx_freq) {
                     if (log.freq) {
                         const band = log.band || freqToBand(log.freq);
-                        const bandStr = band ? ` (${band})` : '';
-                        html = `<div class="text-gray-600 text-xs">${log.freq} MHz${bandStr}</div>`;
+                        const bandStr = band ? ` (${escapeHtml(band)})` : '';
+                        html = `<div class="text-gray-600 text-xs">${escapeHtml(log.freq)} MHz${bandStr}</div>`;
                     } else if (log.band) {
-                        html = `<div class="text-gray-600 text-xs">${log.band}</div>`;
+                        html = `<div class="text-gray-600 text-xs">${escapeHtml(log.band)}</div>`;
                     } else {
                         html = '-';
                     }
                 }
                 return html;
             } else if (qsoType === 'EYEBALL') {
-                // Eyeball 通联：显示 QTH（如果有）
+                // Eyeball 通联：显示 QTH（XSS 转义）
                 if (log.qth) {
-                    return `<span class="text-gray-500 text-xs">${log.qth}</span>`;
+                    return `<span class="text-gray-500 text-xs">${escapeHtml(log.qth)}</span>`;
                 }
                 return '<span class="text-gray-400 text-xs">-</span>';
             }
 
-            // 普通通联：显示频率和波段（带波段信息）
+            // 普通通联：显示频率和波段
             const freq = log.freq || '';
             const band = log.band || (freq ? freqToBand(freq) : '');
             let html = '';
             if (freq) {
-                html += `<span class="text-gray-700">${freq} MHz</span>`;
+                html += `<span class="text-gray-700">${escapeHtml(freq)} MHz</span>`;
             }
             if (band) {
-                html += `<span class="text-gray-500 text-xs ml-1">(${band})</span>`;
+                html += `<span class="text-gray-500 text-xs ml-1">(${escapeHtml(band)})</span>`;
             }
             if (!freq && !band) {
                 html = '-';
@@ -1046,8 +1046,24 @@
         });
 
         // ===== 登录状态检查 =====
+        let csrfToken = '';
+
+        // 获取 CSRF Token（登录成功后调用）
+        function fetchCsrfToken() {
+            return fetch('/api/admin/csrf-token').then(r => r.json()).then(data => {
+                csrfToken = data.csrf_token || '';
+            }).catch(() => {});
+        }
+
+        // 构造带 CSRF Token 的请求头
+        function csrfHeaders(extra) {
+            return Object.assign({ 'X-CSRF-Token': csrfToken }, extra || {});
+        }
+
         fetch('/api/admin/check').then(r => r.json()).then(data => {
-            if (data.logged_in) showAdmin();
+            if (data.logged_in) {
+                fetchCsrfToken().then(() => showAdmin());
+            }
         }).catch(() => {});
 
         // ===== 登录 =====
@@ -1060,13 +1076,13 @@
             fetch('/api/admin/login', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username, password})
-            }).then(r => { if (r.ok) { r.json().then(() => showAdmin()); } else { r.json().then(data => { document.getElementById('loginError').textContent = data.detail || '登录失败'; document.getElementById('loginError').classList.remove('hidden'); }); } setLoading(btn, false); })
+            }).then(r => { if (r.ok) { r.json().then(() => { fetchCsrfToken().then(() => showAdmin()); }); } else { r.json().then(data => { document.getElementById('loginError').textContent = data.detail || '登录失败'; document.getElementById('loginError').classList.remove('hidden'); }); } setLoading(btn, false); })
             .catch(() => { showToast('登录请求失败', 'error'); setLoading(btn, false); });
         });
 
         // ===== 退出登录 =====
         document.getElementById('logoutBtn').addEventListener('click', function() {
-            fetch('/api/admin/logout', {method: 'POST'}).then(() => location.reload()).catch(() => location.reload());
+            fetch('/api/admin/logout', {method: 'POST', headers: csrfHeaders()}).then(() => location.reload()).catch(() => location.reload());
         });
 
         // ===== 修改密码弹窗 =====
@@ -1094,7 +1110,7 @@
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
             fetch('/api/admin/change-password', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: csrfHeaders({'Content-Type': 'application/json'}),
                 body: JSON.stringify({old_password: oldPassword, new_password: newPassword})
             }).then(r => r.json().then(data => {
                 setLoading(btn, false);
@@ -1159,7 +1175,7 @@
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
             fetch('/api/admin/complete-first-login', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: csrfHeaders({'Content-Type': 'application/json'}),
                 body: JSON.stringify(data)
             }).then(r => r.json().then(result => {
                 setLoading(btn, false);
@@ -1216,7 +1232,7 @@
             if (data.logs.length === 0) { noLogs.classList.remove('hidden'); tbody.innerHTML = ''; return; }
             noLogs.classList.add('hidden');
             tbody.innerHTML = data.logs.map(log => {
-                const statusOpts = STATUS_OPTIONS.map(s => `<option value="${s}" ${s === log.qsl_status ? 'selected' : ''}>${s}</option>`).join('');
+                const statusOpts = STATUS_OPTIONS.map(s => `<option value="${escapeHtml(s)}" ${s === log.qsl_status ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
                 const typeLabel = QSO_TYPE_LABELS[log.qso_type || 'NORMAL'] || '一般通联';
                 const typeIcon = QSO_TYPE_ICONS[log.qso_type || 'NORMAL'] || '';
                 let typeBadgeClass = 'bg-gray-100 text-gray-600';
@@ -1224,29 +1240,30 @@
                 else if (log.qso_type === 'REP') typeBadgeClass = 'bg-orange-100 text-orange-700';
                 else if (log.qso_type === 'EYEBALL') typeBadgeClass = 'bg-teal-100 text-teal-700';
 
-                // 呼号显示：支持 QRZ 跳转和 SK 标识
-                let callHtml = `<a href="https://www.qrz.com/db/${encodeURIComponent(log.call)}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">${log.call}</a>`;
+                // 呼号显示：支持 QRZ 跳转和 SK 标识（XSS 转义）
+                const escapedCall = escapeHtml(log.call);
+                let callHtml = `<a href="https://www.qrz.com/db/${encodeURIComponent(log.call)}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline">${escapedCall}</a>`;
                 if (log.is_sk) {
                     callHtml += ' <span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-600 ml-1">SK</span>';
                 }
 
-                // Eyeball QSO 类型标签：如果有地点信息，添加 title 悬停提示
-                const titleAttr = (log.qso_type === 'EYEBALL' && log.qth) ? ` title="${log.qth}"` : '';
+                // Eyeball QSO 类型标签：如果有地点信息，添加 title 悬停提示（XSS 转义）
+                const titleAttr = (log.qso_type === 'EYEBALL' && log.qth) ? ` title="${escapeHtml(log.qth)}"` : '';
 
                 // Eyeball QSO 只有日期没有具体时间，显示 "-"
                 const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
 
                 // Eyeball QSO 没有 RST，显示 "-"
-                const rstDisplay = log.qso_type === 'EYEBALL' ? '-' : `${log.rst_sent || '-'} / ${log.rst_rcvd || '-'}`;
+                const rstDisplay = log.qso_type === 'EYEBALL' ? '-' : `${escapeHtml(log.rst_sent) || '-'} / ${escapeHtml(log.rst_rcvd) || '-'}`;
 
                 return `<tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 text-gray-500 text-center whitespace-nowrap">${log.id}</td>
                     <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${formatDate(log.qso_date)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${timeDisplay}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(formatDate(log.qso_date))}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(timeDisplay)}</td>
                     <td class="px-3 py-2">${formatFreqCell(log)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${log.mode || '-'}</td>
-                    <td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}"${titleAttr}>${typeIcon} ${typeLabel}</span></td>
+                    <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(log.mode) || '-'}</td>
+                    <td class="px-3 py-2 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs ${typeBadgeClass}"${titleAttr}>${typeIcon} ${escapeHtml(typeLabel)}</span></td>
                     <td class="px-3 py-2 text-center whitespace-nowrap">${rstDisplay}</td>
                     <td class="px-3 py-2 whitespace-nowrap"><select onchange="updateStatus(${log.id}, this.value)" class="border rounded px-2 py-1 text-xs">${statusOpts}</select></td>
                     <td class="px-3 py-2 whitespace-nowrap">
@@ -1298,7 +1315,7 @@
 
         // ===== 修改卡片状态 =====
         function updateStatus(id, status) {
-            fetch(`/api/admin/logs/${id}/status`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({qsl_status: status}) })
+            fetch(`/api/admin/logs/${id}/status`, { method: 'PUT', headers: csrfHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({qsl_status: status}) })
                 .then(r => { if (r.ok) showToast('状态已更新', 'success'); else showToast('状态更新失败', 'error'); })
                 .catch(() => showToast('状态更新失败', 'error'));
         }
@@ -1308,7 +1325,7 @@
             const log = allLogs.find(l => l.id === id);
             const info = log ? `（${log.call} - ${formatDate(log.qso_date)}）` : '';
             if (!confirm(`确定删除这条记录${info}？`)) return;
-            fetch(`/api/admin/logs/${id}`, {method: 'DELETE'})
+            fetch(`/api/admin/logs/${id}`, {method: 'DELETE', headers: csrfHeaders()})
                 .then(r => { if (r.ok) { showToast('记录已删除', 'success'); loadLogs(); } else showToast('删除失败', 'error'); })
                 .catch(() => showToast('删除失败', 'error'));
         }
@@ -1510,15 +1527,14 @@
             } else if (qsoType === 'REP') {
                 requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',tx_freq:'上行频率',rx_freq:'下行频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             } else {
-                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
+                requiredFields = {call:'呼号',qso_date:'日期',time_on:'时间',freq:'频率',mode:'模式',rst_sent:'RST发送',rst_rcvd:'RST接收',qsl_status:'卡片状态'};
             }
             const missing = [];
             for (const [k, label] of Object.entries(requiredFields)) { if (!data[k]) missing.push(label); }
-            if (qsoType !== 'EYEBALL' && qsoType !== 'SAT' && qsoType !== 'REP' && !data.freq && !data.band) missing.push('频率');
             if (missing.length) { document.getElementById('editError').textContent = '请填写必填字段：' + missing.join('、'); document.getElementById('editError').classList.remove('hidden'); return; }
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
-            fetch(`/api/admin/logs/${id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            fetch(`/api/admin/logs/${id}`, { method: 'PUT', headers: csrfHeaders({'Content-Type': 'application/json'}), body: JSON.stringify(data) })
                 .then(r => { setLoading(btn, false); if (r.ok) { closeEditModal(); loadLogs(); showToast('记录已更新', 'success'); } else r.json().then(result => { document.getElementById('editError').textContent = result.detail || '保存失败'; document.getElementById('editError').classList.remove('hidden'); }); })
                 .catch(() => { setLoading(btn, false); showToast('保存失败', 'error'); });
         });
@@ -1594,7 +1610,7 @@
             if (missing.length) { showToast('请填写必填字段：' + missing.join('、'), 'warning'); return; }
             const btn = form.querySelector('button[type="submit"]');
             setLoading(btn, true);
-            fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            fetch('/api/admin/logs', { method: 'POST', headers: csrfHeaders({'Content-Type': 'application/json'}), body: JSON.stringify(data) })
                 .then(r => {
                     if (r.status === 409) {
                         r.json().then(result => {
@@ -1602,7 +1618,7 @@
                             if (confirm(result.detail + '\n\n是否强制添加？')) {
                                 data.force = true;
                                 setLoading(btn, true);
-                                fetch('/api/admin/logs', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                                fetch('/api/admin/logs', { method: 'POST', headers: csrfHeaders({'Content-Type': 'application/json'}), body: JSON.stringify(data) })
                                     .then(r2 => r2.json()).then(() => {
                                         const savedType = document.getElementById('qsoTypeSelect').value;
                                         form.reset();
@@ -1642,7 +1658,7 @@
             formData.append('force', 'false');
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
-            fetch('/api/admin/import-adif', { method: 'POST', body: formData })
+            fetch('/api/admin/import-adif', { method: 'POST', headers: csrfHeaders(), body: formData })
                 .then(r => r.json()).then(data => {
                     setLoading(btn, false);
                     const p = document.getElementById('importResult');
@@ -1658,7 +1674,7 @@
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             formData.append('force', 'true');
-            fetch('/api/admin/import-adif', { method: 'POST', body: formData })
+            fetch('/api/admin/import-adif', { method: 'POST', headers: csrfHeaders(), body: formData })
                 .then(r => r.json()).then(data => {
                     const p = document.getElementById('importResult');
                     p.classList.remove('hidden');
@@ -1688,14 +1704,15 @@
                 let html = '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-gray-50 text-gray-600"><tr>';
                 html += '<th class="px-3 py-2">文件名</th><th class="px-3 py-2">大小</th><th class="px-3 py-2">创建时间</th><th class="px-3 py-2">操作</th></tr></thead><tbody>';
                 data.backups.forEach(b => {
+                    const safeFilename = escapeHtml(b.filename);
                     html += `<tr class="border-b hover:bg-gray-50">
-                        <td class="px-3 py-2 font-mono text-xs">${b.filename}</td>
+                        <td class="px-3 py-2 font-mono text-xs">${safeFilename}</td>
                         <td class="px-3 py-2">${formatSize(b.size)}</td>
-                        <td class="px-3 py-2">${b.created_at}</td>
+                        <td class="px-3 py-2">${escapeHtml(b.created_at)}</td>
                         <td class="px-3 py-2 whitespace-nowrap">
-                            <button onclick="downloadBackup('${b.filename}')" class="text-blue-600 hover:text-blue-800 text-xs mr-2">下载</button>
-                            <button onclick="restoreFromBackup('${b.filename}')" class="text-orange-600 hover:text-orange-800 text-xs mr-2">恢复</button>
-                            <button onclick="deleteBackup('${b.filename}')" class="text-red-600 hover:text-red-800 text-xs">删除</button>
+                            <button onclick="downloadBackup('${safeFilename}')" class="text-blue-600 hover:text-blue-800 text-xs mr-2">下载</button>
+                            <button onclick="restoreFromBackup('${safeFilename}')" class="text-orange-600 hover:text-orange-800 text-xs mr-2">恢复</button>
+                            <button onclick="deleteBackup('${safeFilename}')" class="text-red-600 hover:text-red-800 text-xs">删除</button>
                         </td>
                     </tr>`;
                 });
@@ -1709,7 +1726,7 @@
         document.getElementById('backupBtn').addEventListener('click', function() {
             const btn = this;
             setLoading(btn, true);
-            fetch('/api/admin/backup', { method: 'POST' })
+            fetch('/api/admin/backup', { method: 'POST', headers: csrfHeaders() })
                 .then(r => r.json()).then(data => {
                     setLoading(btn, false);
                     if (data.ok) { showToast('备份成功', 'success'); loadBackups(); }
@@ -1723,7 +1740,7 @@
 
         function deleteBackup(filename) {
             if (!confirm('确定删除备份 ' + filename + '？')) return;
-            fetch('/api/admin/backups/' + encodeURIComponent(filename), { method: 'DELETE' })
+            fetch('/api/admin/backups/' + encodeURIComponent(filename), { method: 'DELETE', headers: csrfHeaders() })
                 .then(r => r.json()).then(data => {
                     if (data.ok) { showToast('备份已删除', 'success'); loadBackups(); }
                     else showToast(data.detail || '删除失败', 'error');
@@ -1733,7 +1750,7 @@
         function restoreFromBackup(filename) {
             if (!confirm('确定要恢复到备份 ' + filename + '？\n当前数据库将自动备份。')) return;
             fetch('/api/admin/restore', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: csrfHeaders({'Content-Type': 'application/json'}),
                 body: JSON.stringify({ filename: filename })
             }).then(r => r.json()).then(data => {
                 if (data.ok) {

@@ -2,6 +2,7 @@ import sqlite3
 import os
 import csv
 import io
+from contextlib import contextmanager
 from config import DATABASE_PATH
 
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
@@ -71,129 +72,124 @@ def get_conn():
     return conn
 
 
-def init_db():
+@contextmanager
+def get_db():
+    """数据库连接上下文管理器，确保连接正确关闭，防止连接泄漏"""
     conn = get_conn()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            call TEXT NOT NULL,
-            qso_date TEXT,
-            time_on TEXT,
-            band TEXT,
-            mode TEXT,
-            rst_sent TEXT,
-            rst_rcvd TEXT,
-            qsl_status TEXT DEFAULT '未发送',
-            comment TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    # 添加索引优化查询性能
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_call ON logs(call)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_date ON logs(qso_date)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
+    try:
+        yield conn
+    finally:
+        conn.close()
 
-    # ===== 数据库迁移：添加新字段 =====
-    # QSO 类型系统（NORMAL / SAT / REP）
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN qso_type TEXT DEFAULT 'NORMAL'")
-    except Exception:
-        pass  # 列已存在
-    try:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_type ON logs(qso_type)")
-    except Exception:
-        pass
 
-    # 频率字段（以 MHz 为单位存储，如 "14.270"）
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN freq TEXT")
-    except Exception:
-        pass
+def init_db():
+    with get_db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                call TEXT NOT NULL,
+                qso_date TEXT,
+                time_on TEXT,
+                band TEXT,
+                mode TEXT,
+                rst_sent TEXT,
+                rst_rcvd TEXT,
+                qsl_status TEXT DEFAULT '未发送',
+                comment TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # 添加索引优化查询性能
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_call ON logs(call)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_date ON logs(qso_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
 
-    # 卫星/中继双频支持
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN tx_freq TEXT")
-    except Exception:
-        pass
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN rx_freq TEXT")
-    except Exception:
-        pass
+        # ===== 数据库迁移：添加新字段 =====
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN qso_type TEXT DEFAULT 'NORMAL'")
+        except Exception:
+            pass
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_type ON logs(qso_type)")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN freq TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN tx_freq TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN rx_freq TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN sat_name TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN is_sk INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE logs ADD COLUMN qth TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN password_version INTEGER DEFAULT 1")
+        except Exception:
+            pass
 
-    # 卫星名称（如 "SO-50"、"AO-91"）
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN sat_name TEXT")
-    except Exception:
-        pass
-
-    # Silent Key 标识（表示该 HAM 已去世）
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN is_sk INTEGER DEFAULT 0")
-    except Exception:
-        pass
-
-    # Eyeball QSO 地点字段（用于线下见面的地点信息）
-    try:
-        conn.execute("ALTER TABLE logs ADD COLUMN qth TEXT")
-    except Exception:
-        pass
-
-    # 迁移：添加 first_login 列
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
-    except Exception:
-        pass  # 列已存在
-
-    conn.commit()
-    conn.close()
+        conn.commit()
     seed_admin_user()
 
 
 def seed_admin_user():
     from app.auth import hash_password
-    conn = get_conn()
-    row = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()
-    if row["cnt"] == 0:
-        pw_hash = hash_password("Admin123!")
-        conn.execute(
-            "INSERT INTO users (username, password_hash, first_login) VALUES (?, ?, 1)",
-            ("admin", pw_hash),
-        )
-    # 升级兼容：确保所有用户有 first_login 列
-    conn.execute("UPDATE users SET first_login = 1 WHERE first_login IS NULL")
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        row = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()
+        if row["cnt"] == 0:
+            pw_hash = hash_password("Admin123!")
+            conn.execute(
+                "INSERT INTO users (username, password_hash, first_login) VALUES (?, ?, 1)",
+                ("admin", pw_hash),
+            )
+        conn.execute("UPDATE users SET first_login = 1 WHERE first_login IS NULL")
+        conn.commit()
 
 
 def get_user(username: str) -> dict | None:
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT * FROM users WHERE username = ?", (username,)
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def update_password(username: str, new_password_hash: str) -> bool:
-    conn = get_conn()
-    cur = conn.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ?",
-        (new_password_hash, username),
-    )
-    conn.commit()
-    updated = cur.rowcount > 0
-    conn.close()
-    return updated
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE users SET password_hash = ?, password_version = COALESCE(password_version, 1) + 1 WHERE username = ?",
+            (new_password_hash, username),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def _auto_fill_freq_band(data: dict) -> dict:
@@ -226,85 +222,80 @@ def _auto_fill_freq_band(data: dict) -> dict:
 
 def insert_log(data: dict) -> int:
     data = _auto_fill_freq_band(data)
-    conn = get_conn()
-    cur = conn.execute(
-        """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                             qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            data.get("call", ""),
-            data.get("qso_date", ""),
-            data.get("time_on", ""),
-            data.get("band", ""),
-            data.get("mode", ""),
-            data.get("rst_sent", ""),
-            data.get("rst_rcvd", ""),
-            data.get("qsl_status", "未发送"),
-            data.get("comment", ""),
-            data.get("qso_type", "NORMAL"),
-            data.get("freq", ""),
-            data.get("tx_freq", ""),
-            data.get("rx_freq", ""),
-            data.get("sat_name", ""),
-            1 if data.get("is_sk") else 0,
-            data.get("qth", ""),
-        ),
-    )
-    conn.commit()
-    last_id = cur.lastrowid
-    conn.close()
-    return last_id
-
-
-def insert_logs_batch(records: list[dict]) -> int:
-    conn = get_conn()
-    count = 0
-    for rec in records:
-        rec = _auto_fill_freq_band(rec)
-        conn.execute(
+    with get_db() as conn:
+        cur = conn.execute(
             """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
                                  qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                rec.get("call", ""),
-                rec.get("qso_date", ""),
-                rec.get("time_on", ""),
-                rec.get("band", ""),
-                rec.get("mode", ""),
-                rec.get("rst_sent", ""),
-                rec.get("rst_rcvd", ""),
-                rec.get("qsl_status", "未发送"),
-                rec.get("comment", ""),
-                rec.get("qso_type", "NORMAL"),
-                rec.get("freq", ""),
-                rec.get("tx_freq", ""),
-                rec.get("rx_freq", ""),
-                rec.get("sat_name", ""),
-                1 if rec.get("is_sk") else 0,
-                rec.get("qth", ""),
+                data.get("call", ""),
+                data.get("qso_date", ""),
+                data.get("time_on", ""),
+                data.get("band", ""),
+                data.get("mode", ""),
+                data.get("rst_sent", ""),
+                data.get("rst_rcvd", ""),
+                data.get("qsl_status", "未发送"),
+                data.get("comment", ""),
+                data.get("qso_type", "NORMAL"),
+                data.get("freq", ""),
+                data.get("tx_freq", ""),
+                data.get("rx_freq", ""),
+                data.get("sat_name", ""),
+                1 if data.get("is_sk") else 0,
+                data.get("qth", ""),
             ),
         )
-        count += 1
-    conn.commit()
-    conn.close()
-    return count
+        conn.commit()
+        return cur.lastrowid
+
+
+def insert_logs_batch(records: list[dict]) -> int:
+    with get_db() as conn:
+        count = 0
+        for rec in records:
+            rec = _auto_fill_freq_band(rec)
+            conn.execute(
+                """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
+                                     qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    rec.get("call", ""),
+                    rec.get("qso_date", ""),
+                    rec.get("time_on", ""),
+                    rec.get("band", ""),
+                    rec.get("mode", ""),
+                    rec.get("rst_sent", ""),
+                    rec.get("rst_rcvd", ""),
+                    rec.get("qsl_status", "未发送"),
+                    rec.get("comment", ""),
+                    rec.get("qso_type", "NORMAL"),
+                    rec.get("freq", ""),
+                    rec.get("tx_freq", ""),
+                    rec.get("rx_freq", ""),
+                    rec.get("sat_name", ""),
+                    1 if rec.get("is_sk") else 0,
+                    rec.get("qth", ""),
+                ),
+            )
+            count += 1
+        conn.commit()
+        return count
 
 
 def search_logs_by_call(call: str) -> list[dict]:
-    conn = get_conn()
-    rows = conn.execute(
-        "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC",
-        (f"%{_escape_like(call)}%",),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC",
+            (f"%{_escape_like(call)}%",),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_all_logs() -> list[dict]:
-    conn = get_conn()
-    rows = conn.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC").fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_all_logs_filtered(filters: dict = None) -> list[dict]:
@@ -328,62 +319,55 @@ def get_all_logs_filtered(filters: dict = None) -> list[dict]:
             conditions.append("qso_type = ?")
             params.append(filters["qso_type"])
     where = " AND ".join(conditions)
-    conn = get_conn()
-    rows = conn.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        rows = conn.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params).fetchall()
+        return [dict(r) for r in rows]
 
 
 def update_log(log_id: int, data: dict) -> bool:
     data = _auto_fill_freq_band(data)
-    conn = get_conn()
-    cur = conn.execute(
-        """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
-                           comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=?, qth=? WHERE id=?""",
-        (
-            data.get("call", ""),
-            data.get("qso_date", ""),
-            data.get("time_on", ""),
-            data.get("band", ""),
-            data.get("mode", ""),
-            data.get("rst_sent", ""),
-            data.get("rst_rcvd", ""),
-            data.get("qsl_status", "未发送"),
-            data.get("comment", ""),
-            data.get("qso_type", "NORMAL"),
-            data.get("freq", ""),
-            data.get("tx_freq", ""),
-            data.get("rx_freq", ""),
-            data.get("sat_name", ""),
-            1 if data.get("is_sk") else 0,
-            data.get("qth", ""),
-            log_id,
-        ),
-    )
-    conn.commit()
-    updated = cur.rowcount > 0
-    conn.close()
-    return updated
+    with get_db() as conn:
+        cur = conn.execute(
+            """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
+                               comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=?, qth=? WHERE id=?""",
+            (
+                data.get("call", ""),
+                data.get("qso_date", ""),
+                data.get("time_on", ""),
+                data.get("band", ""),
+                data.get("mode", ""),
+                data.get("rst_sent", ""),
+                data.get("rst_rcvd", ""),
+                data.get("qsl_status", "未发送"),
+                data.get("comment", ""),
+                data.get("qso_type", "NORMAL"),
+                data.get("freq", ""),
+                data.get("tx_freq", ""),
+                data.get("rx_freq", ""),
+                data.get("sat_name", ""),
+                1 if data.get("is_sk") else 0,
+                data.get("qth", ""),
+                log_id,
+            ),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def update_qsl_status(log_id: int, qsl_status: str) -> bool:
-    conn = get_conn()
-    cur = conn.execute(
-        "UPDATE logs SET qsl_status=? WHERE id=?", (qsl_status, log_id)
-    )
-    conn.commit()
-    updated = cur.rowcount > 0
-    conn.close()
-    return updated
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE logs SET qsl_status=? WHERE id=?", (qsl_status, log_id)
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def delete_log(log_id: int) -> bool:
-    conn = get_conn()
-    cur = conn.execute("DELETE FROM logs WHERE id=?", (log_id,))
-    conn.commit()
-    deleted = cur.rowcount > 0
-    conn.close()
-    return deleted
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM logs WHERE id=?", (log_id,))
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
@@ -407,49 +391,45 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
         params.append(filters["qso_type"])
     where = " AND ".join(conditions)
 
-    conn = get_conn()
-    total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
-    offset = (page - 1) * page_size
-    rows = conn.execute(
-        f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
-        params + [page_size, offset],
-    ).fetchall()
-    conn.close()
-    return {
-        "logs": [dict(r) for r in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+    with get_db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
+            params + [page_size, offset],
+        ).fetchall()
+        return {
+            "logs": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
 
 def check_duplicate(call: str, qso_date: str, time_on: str, band: str, mode: str) -> dict | None:
     """检测是否存在重复通联记录（联合五字段判定）"""
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND time_on = ? AND band = ? AND mode = ? LIMIT 1",
-        (call, qso_date, time_on, band, mode),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND time_on = ? AND band = ? AND mode = ? LIMIT 1",
+            (call, qso_date, time_on, band, mode),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def check_duplicate_eyeball(call: str, qso_date: str) -> dict | None:
     """检测是否存在重复的 Eyeball QSO 记录（呼号+日期判定）"""
-    conn = get_conn()
-    row = conn.execute(
-        "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND qso_type = 'EYEBALL' LIMIT 1",
-        (call, qso_date),
-    ).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND qso_type = 'EYEBALL' LIMIT 1",
+            (call, qso_date),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def check_duplicates_batch(records: list[dict]) -> list[dict]:
     """批量检测重复记录，返回重复记录列表"""
     duplicates = []
     for rec in records:
-        # 先自动补全 band（如果只有 freq）
         rec_filled = _auto_fill_freq_band(dict(rec))
         existing = check_duplicate(
             rec_filled.get("call", ""),
@@ -509,23 +489,19 @@ def export_csv(records: list[dict]) -> str:
 
 def complete_first_login(username: str, new_username: str, new_password_hash: str) -> bool:
     """完成首次登录：更新凭据，设置 first_login=0"""
-    conn = get_conn()
-    # 检查新用户名是否已被其他用户占用
-    existing = conn.execute(
-        "SELECT id FROM users WHERE username = ? AND username != ?",
-        (new_username, username),
-    ).fetchone()
-    if existing:
-        conn.close()
-        return False
-    cur = conn.execute(
-        "UPDATE users SET username = ?, password_hash = ?, first_login = 0 WHERE username = ?",
-        (new_username, new_password_hash, username),
-    )
-    conn.commit()
-    updated = cur.rowcount > 0
-    conn.close()
-    return updated
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM users WHERE username = ? AND username != ?",
+            (new_username, username),
+        ).fetchone()
+        if existing:
+            return False
+        cur = conn.execute(
+            "UPDATE users SET username = ?, password_hash = ?, first_login = 0 WHERE username = ?",
+            (new_username, new_password_hash, username),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str = None, page: int = 1, page_size: int = 20) -> dict:
@@ -542,38 +518,36 @@ def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str 
         conditions.append("qso_type = ?")
         params.append(qso_type)
     where = " AND ".join(conditions)
-    conn = get_conn()
-    total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
-    offset = (page - 1) * page_size
-    rows = conn.execute(
-        f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
-        params + [page_size, offset],
-    ).fetchall()
-    conn.close()
-    return {
-        "logs": [dict(r) for r in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+    with get_db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
+            params + [page_size, offset],
+        ).fetchall()
+        return {
+            "logs": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
 
 def search_logs_by_call_paginated(call: str, page: int = 1, page_size: int = 20) -> dict:
     """分页按呼号搜索通联记录"""
-    conn = get_conn()
-    total = conn.execute(
-        "SELECT COUNT(*) as cnt FROM logs WHERE call LIKE ? ESCAPE '\\'",
-        (f"%{_escape_like(call)}%",),
-    ).fetchone()["cnt"]
-    offset = (page - 1) * page_size
-    rows = conn.execute(
-        "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
-        (f"%{_escape_like(call)}%", page_size, offset),
-    ).fetchall()
-    conn.close()
-    return {
-        "logs": [dict(r) for r in rows],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+    with get_db() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) as cnt FROM logs WHERE call LIKE ? ESCAPE '\\'",
+            (f"%{_escape_like(call)}%",),
+        ).fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
+            (f"%{_escape_like(call)}%", page_size, offset),
+        ).fetchall()
+        return {
+            "logs": [dict(r) for r in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }

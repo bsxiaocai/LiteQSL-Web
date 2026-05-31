@@ -108,7 +108,7 @@ def _khz_to_mhz(value: str) -> str:
     """将 ADIF 频率值（kHz 或 MHz 字符串）统一转为 MHz 字符串。
 
     ADIF 规范中 FREQ 单位为 kHz（如 "14270"），但部分软件导出为 MHz（如 "14.270"）。
-    自动判断：如果值 > 1000 且不含小数点，视为 kHz 并转换。
+    自动判断：如果值 > 1000，视为 kHz 并转换（业余频段最高 1300 MHz，>1000 的纯 MHz 值不合理）。
     """
     if not value:
         return ""
@@ -116,9 +116,11 @@ def _khz_to_mhz(value: str) -> str:
         f = float(value)
     except (ValueError, TypeError):
         return ""
-    # 如果值大于 1000 且不含小数点（或小数部分很小），视为 kHz
-    if f > 1000 and "." not in value:
-        return f"{f / 1000:.3f}"
+    # 业余频段最高到 23cm (1300 MHz)，>1000 的值一定是 kHz 单位
+    if f > 1000:
+        mhz = f / 1000
+        # 保留合理精度：去掉多余的尾零
+        return f"{mhz:.6f}".rstrip("0").rstrip(".")
     return value
 
 

@@ -6,7 +6,6 @@ router = APIRouter(prefix="/api", tags=["public"])
 
 @router.get("/recent")
 def recent_logs(
-    limit: int = Query(20, ge=1, le=100),
     band: str = Query(None),
     mode: str = Query(None),
     qso_type: str = Query(None),

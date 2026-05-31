@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import os
 import re
+import secrets
 import bcrypt
 from fastapi import Request, HTTPException
 from starlette.middleware.sessions import SessionMiddleware
@@ -9,17 +10,73 @@ from config import SECRET_KEY
 
 
 def setup_session_middleware(app):
-    app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+    """配置 Session 中间件，启用安全属性"""
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=SECRET_KEY,
+        https_only=False,       # 设为 True 可强制 HTTPS（生产环境建议开启）
+        same_site="lax",        # 防止跨站请求携带 Cookie（CSRF 防护基础）
+        max_age=86400 * 7,      # Session 有效期 7 天
+    )
 
 
 def check_admin(request: Request) -> bool:
-    return bool(request.session.get("username"))
+    """检查是否已登录，并校验 session 中的密码版本是否与数据库一致"""
+    username = request.session.get("username")
+    if not username:
+        return False
+    # 校验密码版本：如果密码被修改过，旧 session 失效
+    session_version = request.session.get("password_version")
+    if session_version is not None:
+        from app.database import get_user
+        user = get_user(username)
+        if not user or user.get("password_version", 1) != session_version:
+            request.session.clear()
+            return False
+    return True
 
 
-def require_admin(request: Request):
+def require_admin(request: Request, allow_first_login: bool = False):
     if not check_admin(request):
         raise HTTPException(status_code=401, detail="未登录")
+    # 首次登录未完成时，阻止所有管理操作（除允许的接口外）
+    if not allow_first_login:
+        from app.database import get_user
+        user = get_user(request.session["username"])
+        if user and user.get("first_login", 0):
+            raise HTTPException(status_code=403, detail="请先完成首次登录凭据修改")
 
+
+# ===== CSRF 防护 =====
+
+def generate_csrf_token(request: Request) -> str:
+    """生成或获取 CSRF Token（存储在 Session 中）"""
+    token = request.session.get("csrf_token")
+    if not token:
+        token = secrets.token_hex(32)
+        request.session["csrf_token"] = token
+    return token
+
+
+def validate_csrf_token(request: Request) -> None:
+    """校验 CSRF Token。
+
+    从请求头 X-CSRF-Token 读取 token，与 Session 中存储的比对。
+    GET/HEAD/OPTIONS 请求不需要校验。
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    session_token = request.session.get("csrf_token")
+    if not session_token:
+        raise HTTPException(status_code=403, detail="CSRF token 缺失，请重新登录")
+    header_token = request.headers.get("X-CSRF-Token", "")
+    if not header_token:
+        raise HTTPException(status_code=403, detail="CSRF token 未提供")
+    if not hmac.compare_digest(session_token, header_token):
+        raise HTTPException(status_code=403, detail="CSRF token 无效")
+
+
+# ===== 密码管理 =====
 
 def hash_password(password: str) -> str:
     """使用 bcrypt 哈希密码，返回 bcrypt 字符串"""

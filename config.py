@@ -20,5 +20,9 @@ else:
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_SECONDS = 600
 
+# 是否信任反向代理头（X-Forwarded-For / X-Real-IP）
+# 仅在部署于 Nginx/Caddy 等反向代理之后时设为 True
+TRUST_PROXY = os.getenv("TRUST_PROXY", "false").lower() in ("true", "1", "yes")
+
 # 备份目录
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), "data", "backups")
