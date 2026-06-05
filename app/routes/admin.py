@@ -458,7 +458,7 @@ async def export_csv_file(
 # ===== 数据库备份与恢复 =====
 
 @router.post("/backup")
-def backup_database(request: Request):
+async def backup_database(request: Request):
     await require_admin(request)
     validate_csrf_token(request)
     result = create_backup()
@@ -466,13 +466,13 @@ def backup_database(request: Request):
 
 
 @router.get("/backups")
-def backup_list(request: Request):
+async def backup_list(request: Request):
     await require_admin(request)
     return {"backups": list_backups()}
 
 
 @router.get("/backups/{filename}")
-def download_backup(filename: str, request: Request):
+async def download_backup(filename: str, request: Request):
     await require_admin(request)
     path = get_backup_path(filename)
     if not path:
@@ -485,7 +485,7 @@ def download_backup(filename: str, request: Request):
 
 
 @router.delete("/backups/{filename}")
-def remove_backup(filename: str, request: Request):
+async def remove_backup(filename: str, request: Request):
     await require_admin(request)
     validate_csrf_token(request)
     if not delete_backup(filename):
