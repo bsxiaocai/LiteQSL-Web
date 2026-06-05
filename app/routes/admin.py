@@ -311,6 +311,11 @@ def list_all_logs(
     mode: str = Query(None),
     qsl_status: str = Query(None),
     qso_type: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    is_sk: str = Query(None),
+    sort_by: str = Query(None),
+    sort_order: str = Query(None),
 ):
     require_admin(request)
     filters = {}
@@ -324,6 +329,16 @@ def list_all_logs(
         filters["qsl_status"] = qsl_status
     if qso_type:
         filters["qso_type"] = qso_type
+    if date_from:
+        filters["date_from"] = date_from
+    if date_to:
+        filters["date_to"] = date_to
+    if is_sk is not None and is_sk != "":
+        filters["is_sk"] = is_sk
+    if sort_by:
+        filters["sort_by"] = sort_by
+    if sort_order:
+        filters["sort_order"] = sort_order
     return get_logs_paginated(filters, page, page_size)
 
 
@@ -369,24 +384,14 @@ async def import_adif(request: Request):
 
 
 @router.get("/export-adif")
-def export_adif_file(request: Request):
-    require_admin(request)
-    records = get_all_logs()
-    content = export_adif(records)
-    return Response(
-        content=content,
-        media_type="text/plain",
-        headers={"Content-Disposition": "attachment; filename=export.adi"},
-    )
-
-
-@router.get("/export-csv")
-def export_csv_file(
+def export_adif_file(
     request: Request,
     band: str = Query(None),
     mode: str = Query(None),
     qsl_status: str = Query(None),
     qso_type: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
 ):
     require_admin(request)
     filters = {}
@@ -398,6 +403,44 @@ def export_csv_file(
         filters["qsl_status"] = qsl_status
     if qso_type:
         filters["qso_type"] = qso_type
+    if date_from:
+        filters["date_from"] = date_from
+    if date_to:
+        filters["date_to"] = date_to
+    records = get_all_logs_filtered(filters if filters else None)
+    content = export_adif(records)
+    filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.adi"
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/export-csv")
+def export_csv_file(
+    request: Request,
+    band: str = Query(None),
+    mode: str = Query(None),
+    qsl_status: str = Query(None),
+    qso_type: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+):
+    require_admin(request)
+    filters = {}
+    if band:
+        filters["band"] = band
+    if mode:
+        filters["mode"] = mode
+    if qsl_status:
+        filters["qsl_status"] = qsl_status
+    if qso_type:
+        filters["qso_type"] = qso_type
+    if date_from:
+        filters["date_from"] = date_from
+    if date_to:
+        filters["date_to"] = date_to
     records = get_all_logs_filtered(filters if filters else None)
     content = export_csv(records)
     filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.csv"

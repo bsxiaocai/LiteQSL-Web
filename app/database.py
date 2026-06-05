@@ -371,6 +371,13 @@ def get_all_logs_filtered(filters: dict = None) -> list[dict]:
         if filters.get("qso_type"):
             conditions.append("qso_type = ?")
             params.append(filters["qso_type"])
+        # 新增：日期范围筛选
+        if filters.get("date_from"):
+            conditions.append("qso_date >= ?")
+            params.append(filters["date_from"].replace("-", ""))
+        if filters.get("date_to"):
+            conditions.append("qso_date <= ?")
+            params.append(filters["date_to"].replace("-", ""))
     where = " AND ".join(conditions)
     with get_db() as conn:
         rows = conn.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params).fetchall()
@@ -424,7 +431,7 @@ def delete_log(log_id: int) -> bool:
 
 
 def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
-    """分页查询通联记录，支持按呼号、波段、模式、卡片状态、QSO类型筛选"""
+    """分页查询通联记录，支持按呼号、波段、模式、卡片状态、QSO类型、日期范围、SK状态筛选"""
     conditions = ["1=1"]
     params = []
     if filters.get("call"):
@@ -442,13 +449,37 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
     if filters.get("qso_type"):
         conditions.append("qso_type = ?")
         params.append(filters["qso_type"])
+    # 新增：日期范围筛选
+    if filters.get("date_from"):
+        conditions.append("qso_date >= ?")
+        params.append(filters["date_from"].replace("-", ""))
+    if filters.get("date_to"):
+        conditions.append("qso_date <= ?")
+        params.append(filters["date_to"].replace("-", ""))
+    # 新增：SK 状态筛选
+    if filters.get("is_sk") is not None and filters.get("is_sk") != "":
+        conditions.append("is_sk = ?")
+        params.append(int(filters["is_sk"]))
     where = " AND ".join(conditions)
+
+    # 排序字段和方向
+    sort_by = filters.get("sort_by", "qso_date")
+    sort_order = filters.get("sort_order", "desc")
+    # 允许的排序字段
+    allowed_sort_fields = {"qso_date", "time_on", "call", "band", "mode", "created_at"}
+    if sort_by not in allowed_sort_fields:
+        sort_by = "qso_date"
+    if sort_order.lower() not in {"asc", "desc"}:
+        sort_order = "desc"
+    order_clause = f"{sort_by} {sort_order}"
+    if sort_by == "qso_date":
+        order_clause = f"qso_date {sort_order}, time_on {sort_order}"
 
     with get_db() as conn:
         total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM logs WHERE {where} ORDER BY {order_clause} LIMIT ? OFFSET ?",
             params + [page_size, offset],
         ).fetchall()
         return {
