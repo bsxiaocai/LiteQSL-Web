@@ -105,6 +105,9 @@
                     <button id="tabStats" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-tab="stats">
                         数据统计
                     </button>
+                    <button id="tabSystem" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-tab="system">
+                        系统管理
+                    </button>
                 </nav>
             </div>
         </div>
@@ -134,7 +137,7 @@
                         <div id="addTimeGroup">
                             <label class="block text-sm text-gray-600 mb-1">时间 (UTC)</label>
                             <div class="flex gap-2">
-                                <input type="time" id="addTimeOn" name="time_on" step="1"
+                                <input type="time" id="addTimeOn" name="time_on"
                                     class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                 <button type="button" id="addNowUTCBtn"
                                     class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在 UTC</button>
@@ -316,6 +319,9 @@
                 </form>
             </section>
 
+            <!-- ===== 系统管理 ===== -->
+            <section id="systemSection" class="hidden space-y-6">
+
             <!-- ADIF Import/Export -->
             <section class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">ADIF 导入 / 导出</h2>
@@ -380,6 +386,7 @@
                         </button>
                     </div>
                 </form>
+            </section>
             </section>
 
             <!-- Logs Table -->
@@ -662,7 +669,7 @@
                     <div id="editTimeGroup">
                         <label class="block text-sm text-gray-600 mb-1">时间 (UTC)</label>
                         <div class="flex gap-2">
-                            <input type="time" id="editTimeOn" step="1"
+                            <input type="time" id="editTimeOn"
                                 class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <button type="button" id="editNowUTCBtn"
                                 class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在 UTC</button>

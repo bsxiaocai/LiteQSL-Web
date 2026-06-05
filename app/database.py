@@ -166,6 +166,15 @@ def init_db():
         except Exception:
             pass
 
+        # ===== 数据清理迁移 =====
+        # 清理 Eyeball QSO 残留的无关字段
+        conn.execute(
+            "UPDATE logs SET time_on='', mode='', rst_sent='', rst_rcvd='', freq='', band='', "
+            "tx_freq='', rx_freq='', sat_name='' WHERE qso_type='EYEBALL'"
+        )
+        # 统一时间精度为 HHMM（去掉秒部分）
+        conn.execute("UPDATE logs SET time_on = substr(time_on, 1, 4) WHERE length(time_on) > 4")
+
         # ===== 系统设置表 =====
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -284,6 +293,11 @@ def _auto_fill_freq_band(data: dict) -> dict:
     # 呼号自动转大写
     if data.get("call"):
         data["call"] = data["call"].strip().upper()
+
+    # Eyeball QSO 只保留呼号、日期、卡片状态、地点，清理无关字段
+    if data.get("qso_type") == "EYEBALL":
+        for field in ("time_on", "mode", "rst_sent", "rst_rcvd", "freq", "band", "tx_freq", "rx_freq", "sat_name"):
+            data[field] = ""
 
     freq = data.get("freq", "")
     band = data.get("band", "")

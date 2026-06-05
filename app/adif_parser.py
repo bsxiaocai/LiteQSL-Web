@@ -35,7 +35,7 @@ def parse_adif(content: str) -> list[dict]:
             elif tag_lower == "qso_date":
                 record["qso_date"] = value[:8] if len(value) >= 8 else value
             elif tag_lower == "time_on":
-                record["time_on"] = value[:6] if len(value) >= 6 else value
+                record["time_on"] = value[:4] if len(value) >= 4 else value
             elif tag_lower == "band":
                 record["band"] = value.lower() if value else ""
             elif tag_lower == "mode":

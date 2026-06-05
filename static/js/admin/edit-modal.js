@@ -114,6 +114,9 @@ function collectEditData() {
         data.rst_rcvd = document.getElementById('editRepRstRcvd').value.trim();
     } else if (qsoType === 'EYEBALL') {
         data.qth = document.getElementById('editQth').value.trim();
+        data.mode = '';
+        data.rst_sent = '';
+        data.rst_rcvd = '';
     } else {
         data.freq = document.getElementById('editFreq').value.trim();
         data.mode = document.getElementById('editMode').value;

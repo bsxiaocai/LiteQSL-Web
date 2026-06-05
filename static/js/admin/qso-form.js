@@ -133,9 +133,9 @@ export function collectFormData(form, qsoType) {
         data.rst_sent = form.querySelector('#addSatFields [name="rst_sent"]')?.value?.trim() || '';
         data.rst_rcvd = form.querySelector('#addSatFields [name="rst_rcvd"]')?.value?.trim() || '';
     } else if (qsoType === 'REP') {
-        data.sat_name = form.querySelector('[name="rep_name"]')?.value?.trim() || '';
-        data.tx_freq = form.querySelector('[name="rep_tx_freq"]')?.value?.trim() || '';
-        data.rx_freq = form.querySelector('[name="rep_rx_freq"]')?.value?.trim() || '';
+        data.sat_name = form.querySelector('#addRepFields [name="sat_name"]')?.value?.trim() || '';
+        data.tx_freq = form.querySelector('#addRepFields [name="tx_freq"]')?.value?.trim() || '';
+        data.rx_freq = form.querySelector('#addRepFields [name="rx_freq"]')?.value?.trim() || '';
         data.mode = form.querySelector('#addRepFields [name="mode"]')?.value || '';
         data.rst_sent = form.querySelector('#addRepFields [name="rst_sent"]')?.value?.trim() || '';
         data.rst_rcvd = form.querySelector('#addRepFields [name="rst_rcvd"]')?.value?.trim() || '';

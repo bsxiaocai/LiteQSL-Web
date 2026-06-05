@@ -752,7 +752,7 @@ async def stats_by_hour(request: Request):
     try:
         async with db.execute(
             "SELECT CAST(substr(time_on, 1, 2) AS INTEGER) as hour, COUNT(*) as count "
-            "FROM logs WHERE time_on != '' AND length(time_on) >= 2 "
+            "FROM logs WHERE time_on != '' AND length(time_on) >= 2 AND qso_type != 'EYEBALL' "
             "GROUP BY hour ORDER BY hour"
         ) as cursor:
             rows = await cursor.fetchall()

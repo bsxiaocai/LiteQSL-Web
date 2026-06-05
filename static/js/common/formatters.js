@@ -39,10 +39,10 @@ export function formatDate(dateStr) {
     return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`;
 }
 
-// 格式化时间：HHMMSS -> HH:MM:SS
+// 格式化时间：HHMM -> HH:MM
 export function formatTime(timeStr) {
-    if (!timeStr || timeStr.length < 6) return timeStr || '-';
-    return `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}:${timeStr.substring(4, 6)}`;
+    if (!timeStr || timeStr.length < 4) return timeStr || '-';
+    return `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}`;
 }
 
 // 格式化类型标签
