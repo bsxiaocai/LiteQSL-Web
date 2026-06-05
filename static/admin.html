@@ -114,7 +114,7 @@
 
         <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
             <!-- ===== 手动录入 QSO ===== -->
-            <section class="bg-white rounded-lg shadow p-6">
+            <section data-tab="manage" class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">手动录入 QSO</h2>
                 <form id="addForm" class="space-y-4">
                     <!-- 第一行：基础信息 -->
@@ -135,12 +135,12 @@
                         </div>
                         <!-- 时间字段：普通/中继/卫星通联显示，Eyeball 隐藏 -->
                         <div id="addTimeGroup">
-                            <label class="block text-sm text-gray-600 mb-1">时间 (UTC)</label>
+                            <label class="block text-sm text-gray-600 mb-1">时间 (北京时间)</label>
                             <div class="flex gap-2">
                                 <input type="time" id="addTimeOn" name="time_on"
                                     class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <button type="button" id="addNowUTCBtn"
-                                    class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在 UTC</button>
+                                <button type="button" id="addNowBtn"
+                                    class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在</button>
                             </div>
                         </div>
                         <div>
@@ -320,7 +320,7 @@
             </section>
 
             <!-- ===== 系统管理 ===== -->
-            <section id="systemSection" class="hidden space-y-6">
+            <section id="systemSection" data-tab="system" class="hidden space-y-6">
 
             <!-- ADIF Import/Export -->
             <section class="bg-white rounded-lg shadow p-6">
@@ -390,7 +390,7 @@
             </section>
 
             <!-- Logs Table -->
-            <section class="bg-white rounded-lg shadow p-6">
+            <section data-tab="manage" class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">记录管理</h2>
                 <!-- 筛选控件 -->
                 <div class="flex flex-wrap gap-3 mb-4 items-end">
@@ -512,7 +512,7 @@
             </section>
 
             <!-- ===== 数据统计 ===== -->
-            <section id="statsSection" class="hidden space-y-6">
+            <section id="statsSection" data-tab="stats" class="hidden space-y-6">
                 <!-- 概览卡片 -->
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div class="bg-white rounded-lg shadow p-4 text-center">
@@ -569,7 +569,7 @@
 
                 <!-- 通联时间分布 -->
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">通联时间分布（按小时 UTC）</h3>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">通联时间分布（按小时 北京时间）</h3>
                     <div class="h-64">
                         <canvas id="chartHour"></canvas>
                     </div>
@@ -667,12 +667,12 @@
                     </div>
                     <!-- 时间字段：普通/中继/卫星通联显示，Eyeball 隐藏 -->
                     <div id="editTimeGroup">
-                        <label class="block text-sm text-gray-600 mb-1">时间 (UTC)</label>
+                        <label class="block text-sm text-gray-600 mb-1">时间 (北京时间)</label>
                         <div class="flex gap-2">
                             <input type="time" id="editTimeOn"
                                 class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <button type="button" id="editNowUTCBtn"
-                                class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在 UTC</button>
+                            <button type="button" id="editNowBtn"
+                                class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在</button>
                         </div>
                     </div>
                     <div>

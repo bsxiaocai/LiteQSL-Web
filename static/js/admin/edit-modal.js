@@ -195,7 +195,7 @@ export function initEditModal() {
 // 设置编辑弹窗的日期时间按钮
 export function setupEditDateTimeButtons() {
     const editTodayBtn = document.getElementById('editTodayBtn');
-    const editNowUTCBtn = document.getElementById('editNowUTCBtn');
+    const editNowBtn = document.getElementById('editNowBtn');
 
     if (editTodayBtn) {
         editTodayBtn.addEventListener('click', function() {
@@ -207,11 +207,13 @@ export function setupEditDateTimeButtons() {
         });
     }
 
-    if (editNowUTCBtn) {
-        editNowUTCBtn.addEventListener('click', function() {
+    if (editNowBtn) {
+        editNowBtn.addEventListener('click', function() {
             const now = new Date();
-            const timeStr = String(now.getUTCHours()).padStart(2, '0') + ':' +
-                String(now.getUTCMinutes()).padStart(2, '0');
+            const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+            const beijing = new Date(utcMs + 8 * 3600000);
+            const timeStr = String(beijing.getHours()).padStart(2, '0') + ':' +
+                String(beijing.getMinutes()).padStart(2, '0');
             document.getElementById('editTimeOn').value = timeStr;
         });
     }

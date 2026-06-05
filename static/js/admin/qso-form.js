@@ -69,14 +69,16 @@ export function setTodayDate(inputId) {
     input.value = dateStr;
 }
 
-// 设置当前 UTC 时间
-export function setNowUTC(inputId) {
+// 设置当前北京时间
+export function setNowBeijing(inputId) {
     const input = document.getElementById(inputId);
     if (!input) return;
 
     const now = new Date();
-    const timeStr = String(now.getUTCHours()).padStart(2, '0') + ':' +
-        String(now.getUTCMinutes()).padStart(2, '0');
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+    const beijing = new Date(utcMs + 8 * 3600000);
+    const timeStr = String(beijing.getHours()).padStart(2, '0') + ':' +
+        String(beijing.getMinutes()).padStart(2, '0');
     input.value = timeStr;
 }
 
@@ -84,7 +86,7 @@ export function setNowUTC(inputId) {
 export function setupAutoDateTime() {
     // 添加表单的日期时间
     setTodayDate('addQsoDate');
-    setNowUTC('addTimeOn');
+    setNowBeijing('addTimeOn');
 
     // 今天按钮
     const todayBtn = document.getElementById('addTodayBtn');
@@ -92,10 +94,10 @@ export function setupAutoDateTime() {
         todayBtn.addEventListener('click', () => setTodayDate('addQsoDate'));
     }
 
-    // 现在 UTC 按钮
-    const nowUTCBtn = document.getElementById('addNowUTCBtn');
-    if (nowUTCBtn) {
-        nowUTCBtn.addEventListener('click', () => setNowUTC('addTimeOn'));
+    // 现在按钮
+    const nowBtn = document.getElementById('addNowBtn');
+    if (nowBtn) {
+        nowBtn.addEventListener('click', () => setNowBeijing('addTimeOn'));
     }
 
     // EYEBALL 类型切换时自动填充日期
@@ -243,7 +245,7 @@ export function initAddForm(onSuccess) {
             this.reset();
             setupFormTypeToggle('add');
             setTodayDate('addQsoDate');
-            setNowUTC('addTimeOn');
+            setNowBeijing('addTimeOn');
             onSuccess();
         } else if (result.duplicate) {
             if (confirm('检测到重复记录，是否仍然添加？')) {
@@ -257,7 +259,7 @@ export function initAddForm(onSuccess) {
                     this.reset();
                     setupFormTypeToggle('add');
                     setTodayDate('addQsoDate');
-                    setNowUTC('addTimeOn');
+                    setNowBeijing('addTimeOn');
                     onSuccess();
                 } else {
                     showToast(retryResult.detail || '添加失败', 'error');

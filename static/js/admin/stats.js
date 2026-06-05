@@ -248,9 +248,7 @@ function renderTopCallsTable(data, totalLogs) {
 // 初始化标签页切换
 export function initTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
-    const manageSection = document.querySelector('main > section:first-of-type');
-    const systemSection = document.getElementById('systemSection');
-    const statsSection = document.getElementById('statsSection');
+    const sections = document.querySelectorAll('main > [data-tab]');
 
     tabBtns.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -265,9 +263,9 @@ export function initTabs() {
             this.classList.add('border-blue-500', 'text-blue-600');
 
             // 切换内容显示
-            manageSection.classList.toggle('hidden', tab !== 'manage');
-            systemSection.classList.toggle('hidden', tab !== 'system');
-            statsSection.classList.toggle('hidden', tab !== 'stats');
+            sections.forEach(sec => {
+                sec.classList.toggle('hidden', sec.dataset.tab !== tab);
+            });
 
             // 加载统计数据
             if (tab === 'stats') {
