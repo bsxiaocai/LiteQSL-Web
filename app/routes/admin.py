@@ -26,6 +26,10 @@ from app.database import (
     QSL_STATUSES,
     QSO_TYPES,
     QSO_TYPE_LABELS,
+    delete_logs_batch,
+    update_logs_status_batch,
+    update_logs_sk_batch,
+    get_logs_by_ids,
 )
 from app.adif_parser import parse_adif, export_adif
 from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
@@ -59,7 +63,7 @@ async def login(request: Request):
     if not username or not password:
         raise HTTPException(status_code=400, detail="请输入用户名和密码")
 
-    user = get_user(username)
+    user = await get_user(username)
     if not user:
         record_failure(ip)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
@@ -74,7 +78,7 @@ async def login(request: Request):
     # 自动升级旧 SHA-256 哈希到 bcrypt
     if needs_upgrade:
         new_hash = hash_password(password)
-        update_password(username, new_hash)
+        await update_password(username, new_hash)
     request.session["username"] = username
     request.session["password_version"] = user.get("password_version", 1)
     return {"ok": True, "first_login": bool(user.get("first_login", 0))}
@@ -87,10 +91,10 @@ def logout(request: Request):
 
 
 @router.get("/check")
-def check_login(request: Request):
+async def check_login(request: Request):
     if not check_admin(request):
         return {"logged_in": False}
-    user = get_user(request.session["username"])
+    user = await get_user(request.session["username"])
     return {"logged_in": True, "first_login": bool(user.get("first_login", 0)) if user else False}
 
 
@@ -104,7 +108,7 @@ async def change_password(request: Request):
     if not old_password or not new_password:
         raise HTTPException(status_code=400, detail="请输入旧密码和新密码")
     username = request.session["username"]
-    user = get_user(username)
+    user = await get_user(username)
     is_valid, _ = verify_password(old_password, user["password_hash"])
     if not is_valid:
         raise HTTPException(status_code=400, detail="旧密码错误")
@@ -112,14 +116,14 @@ async def change_password(request: Request):
     if not valid:
         raise HTTPException(status_code=400, detail=msg)
     new_hash = hash_password(new_password)
-    update_password(username, new_hash)
+    await update_password(username, new_hash)
     return {"ok": True}
 
 
 @router.get("/first-login-status")
-def first_login_status(request: Request):
+async def first_login_status(request: Request):
     require_admin(request, allow_first_login=True)
-    user = get_user(request.session["username"])
+    user = await get_user(request.session["username"])
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
     return {"first_login": bool(user.get("first_login", 0))}
@@ -137,7 +141,7 @@ async def complete_first_login_endpoint(request: Request):
     confirm_password = body.get("confirm_password", "")
 
     username = request.session["username"]
-    user = get_user(username)
+    user = await get_user(username)
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
 
@@ -161,13 +165,13 @@ async def complete_first_login_endpoint(request: Request):
 
     # 更新（先更新数据库，成功后再更新 session）
     new_hash = hash_password(new_password)
-    if not complete_first_login(username, new_username, new_hash):
+    if not await complete_first_login(username, new_username, new_hash):
         raise HTTPException(status_code=400, detail="新用户名已被占用")
 
     # 数据库更新成功后才更新 session
     request.session["username"] = new_username
     # 更新 session 中的密码版本（complete_first_login 不经过 update_password，手动+1）
-    user_after = get_user(new_username)
+    user_after = await get_user(new_username)
     if user_after:
         request.session["password_version"] = user_after.get("password_version", 1)
     return {"ok": True}
@@ -225,7 +229,7 @@ async def add_log(request: Request):
     # 重复检测（force=true 时跳过）
     if not data.get("force"):
         if qso_type == "EYEBALL":
-            existing = check_duplicate_eyeball(data["call"], data["qso_date"])
+            existing = await check_duplicate_eyeball(data["call"], data["qso_date"])
             if existing:
                 raise HTTPException(
                     status_code=409,
@@ -237,13 +241,13 @@ async def add_log(request: Request):
             if not band_for_check and data.get("freq"):
                 band_for_check = freq_to_band(data["freq"])
             if band_for_check:
-                existing = check_duplicate(data["call"], data["qso_date"], data["time_on"], band_for_check, data.get("mode", ""))
+                existing = await check_duplicate(data["call"], data["qso_date"], data["time_on"], band_for_check, data.get("mode", ""))
                 if existing:
                     raise HTTPException(
                         status_code=409,
                         detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {band_for_check} {data.get('mode', '')} 的记录 (ID: {existing['id']})",
                     )
-    log_id = insert_log(data)
+    log_id = await insert_log(data)
     return {"ok": True, "id": log_id}
 
 
@@ -274,7 +278,7 @@ async def edit_log(log_id: int, request: Request):
         if not data.get(field):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
 
-    if not update_log(log_id, data):
+    if not await update_log(log_id, data):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
 
@@ -287,7 +291,7 @@ async def change_status(log_id: int, request: Request):
     status = body.get("qsl_status", "")
     if status not in QSL_STATUSES:
         raise HTTPException(status_code=400, detail="无效的卡片状态")
-    if not update_qsl_status(log_id, status):
+    if not await update_qsl_status(log_id, status):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
 
@@ -296,13 +300,13 @@ async def change_status(log_id: int, request: Request):
 async def remove_log(log_id: int, request: Request):
     require_admin(request)
     validate_csrf_token(request)
-    if not delete_log(log_id):
+    if not await delete_log(log_id):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
 
 
 @router.get("/logs")
-def list_all_logs(
+async def list_all_logs(
     request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -339,7 +343,7 @@ def list_all_logs(
         filters["sort_by"] = sort_by
     if sort_order:
         filters["sort_order"] = sort_order
-    return get_logs_paginated(filters, page, page_size)
+    return await get_logs_paginated(filters, page, page_size)
 
 
 @router.post("/import-adif")
@@ -371,7 +375,7 @@ async def import_adif(request: Request):
         raise HTTPException(status_code=400, detail="未解析到有效记录")
     # 重复检测
     if not force:
-        duplicates = check_duplicates_batch(records)
+        duplicates = await check_duplicates_batch(records)
         if duplicates:
             return {
                 "ok": False,
@@ -379,12 +383,12 @@ async def import_adif(request: Request):
                 "duplicate_count": len(duplicates),
                 "total": len(records),
             }
-    count = insert_logs_batch(records)
+    count = await insert_logs_batch(records)
     return {"ok": True, "count": count}
 
 
 @router.get("/export-adif")
-def export_adif_file(
+async def export_adif_file(
     request: Request,
     band: str = Query(None),
     mode: str = Query(None),
@@ -407,7 +411,7 @@ def export_adif_file(
         filters["date_from"] = date_from
     if date_to:
         filters["date_to"] = date_to
-    records = get_all_logs_filtered(filters if filters else None)
+    records = await get_all_logs_filtered(filters if filters else None)
     content = export_adif(records)
     filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.adi"
     return Response(
@@ -418,7 +422,7 @@ def export_adif_file(
 
 
 @router.get("/export-csv")
-def export_csv_file(
+async def export_csv_file(
     request: Request,
     band: str = Query(None),
     mode: str = Query(None),
@@ -441,7 +445,7 @@ def export_csv_file(
         filters["date_from"] = date_from
     if date_to:
         filters["date_to"] = date_to
-    records = get_all_logs_filtered(filters if filters else None)
+    records = await get_all_logs_filtered(filters if filters else None)
     content = export_csv(records)
     filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.csv"
     return Response(
@@ -508,11 +512,11 @@ async def restore_database(request: Request):
 # ===== 系统设置 =====
 
 @router.get("/settings")
-def get_settings(request: Request):
+async def get_settings(request: Request):
     """获取所有系统设置"""
     require_admin(request)
     from app.database import get_all_settings
-    return {"settings": get_all_settings()}
+    return {"settings": await get_all_settings()}
 
 
 @router.put("/settings")
@@ -531,7 +535,247 @@ async def update_settings(request: Request):
             if not isinstance(value, str):
                 raise HTTPException(status_code=400, detail=f"设置项 {key} 必须是字符串")
             value = value.strip().upper() if key == "callsign" else value.strip()
-            update_setting(key, value)
+            await update_setting(key, value)
             updated.append(key)
 
     return {"ok": True, "updated": updated}
+
+
+# ===== 批量操作 =====
+
+@router.post("/logs/batch-delete")
+async def batch_delete_logs(request: Request):
+    """批量删除记录"""
+    require_admin(request)
+    validate_csrf_token(request)
+    body = await request.json()
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择要删除的记录")
+    if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+        raise HTTPException(status_code=400, detail="无效的记录 ID")
+    try:
+        deleted = await delete_logs_batch(ids)
+        return {"ok": True, "deleted": deleted}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/logs/batch-status")
+async def batch_update_status(request: Request):
+    """批量修改 QSL 状态"""
+    require_admin(request)
+    validate_csrf_token(request)
+    body = await request.json()
+    ids = body.get("ids", [])
+    status = body.get("status", "")
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择要修改的记录")
+    if not status:
+        raise HTTPException(status_code=400, detail="请选择目标状态")
+    try:
+        updated = await update_logs_status_batch(ids, status)
+        return {"ok": True, "updated": updated}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/logs/batch-sk")
+async def batch_update_sk(request: Request):
+    """批量修改 SK 标记"""
+    require_admin(request)
+    validate_csrf_token(request)
+    body = await request.json()
+    ids = body.get("ids", [])
+    is_sk = body.get("is_sk")
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择要修改的记录")
+    if is_sk not in (0, 1):
+        raise HTTPException(status_code=400, detail="无效的 SK 标记值")
+    try:
+        updated = await update_logs_sk_batch(ids, is_sk)
+        return {"ok": True, "updated": updated}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/logs/batch-export")
+async def batch_export(request: Request):
+    """批量导出选中记录"""
+    require_admin(request)
+    validate_csrf_token(request)
+    body = await request.json()
+    ids = body.get("ids", [])
+    format_type = body.get("format", "adif")
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择要导出的记录")
+    if format_type not in ("adif", "csv"):
+        raise HTTPException(status_code=400, detail="不支持的导出格式")
+    records = await get_logs_by_ids(ids)
+    if not records:
+        raise HTTPException(status_code=404, detail="未找到指定记录")
+    if format_type == "adif":
+        content = export_adif(records)
+        filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.adi"
+        return Response(
+            content=content,
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    else:
+        content = export_csv(records)
+        filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.csv"
+        return Response(
+            content=content.encode("utf-8"),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+
+# ===== 统计仪表盘 =====
+
+@router.get("/stats/summary")
+async def stats_summary(request: Request):
+    """获取统计数据概览"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        # 总通联数
+        async with db.execute("SELECT COUNT(*) as cnt FROM logs") as cursor:
+            row = await cursor.fetchone()
+            total_logs = row["cnt"]
+
+        # 唯一呼号数
+        async with db.execute("SELECT COUNT(DISTINCT call) as cnt FROM logs") as cursor:
+            row = await cursor.fetchone()
+            total_callsigns = row["cnt"]
+
+        # 本月通联数
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of month')"
+        ) as cursor:
+            row = await cursor.fetchone()
+            this_month = row["cnt"]
+
+        # 本年通联数
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of year')"
+        ) as cursor:
+            row = await cursor.fetchone()
+            this_year = row["cnt"]
+
+        # 待确认 QSL
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM logs WHERE qsl_status = '未发送'"
+        ) as cursor:
+            row = await cursor.fetchone()
+            qsl_pending = row["cnt"]
+
+        return {
+            "total_logs": total_logs,
+            "total_callsigns": total_callsigns,
+            "this_month": this_month,
+            "this_year": this_year,
+            "qsl_pending": qsl_pending,
+        }
+    finally:
+        await db.close()
+
+
+@router.get("/stats/by-band")
+async def stats_by_band(request: Request):
+    """按波段统计"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            "SELECT band, COUNT(*) as count FROM logs WHERE band != '' GROUP BY band ORDER BY count DESC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"band": row["band"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+@router.get("/stats/by-mode")
+async def stats_by_mode(request: Request):
+    """按模式统计"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            "SELECT mode, COUNT(*) as count FROM logs WHERE mode != '' GROUP BY mode ORDER BY count DESC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"mode": row["mode"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+@router.get("/stats/by-type")
+async def stats_by_type(request: Request):
+    """按 QSO 类型统计"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            "SELECT qso_type, COUNT(*) as count FROM logs GROUP BY qso_type ORDER BY count DESC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"qso_type": row["qso_type"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+@router.get("/stats/by-month")
+async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60)):
+    """按月统计通联数量"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            f"SELECT substr(qso_date, 1, 7) as month, COUNT(*) as count "
+            f"FROM logs WHERE qso_date >= date('now', '-{months} months') "
+            f"GROUP BY month ORDER BY month"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"month": row["month"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+@router.get("/stats/by-hour")
+async def stats_by_hour(request: Request):
+    """按小时统计通联分布"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            "SELECT CAST(substr(time_on, 1, 2) AS INTEGER) as hour, COUNT(*) as count "
+            "FROM logs WHERE time_on != '' AND length(time_on) >= 2 "
+            "GROUP BY hour ORDER BY hour"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"hour": row["hour"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+@router.get("/stats/top-calls")
+async def stats_top_calls(request: Request, limit: int = Query(20, ge=1, le=100)):
+    """Top 通联对象"""
+    require_admin(request)
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            "SELECT call, COUNT(*) as count FROM logs GROUP BY call ORDER BY count DESC LIMIT ?",
+            (limit,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"call": row["call"], "count": row["count"]} for row in rows]
+    finally:
+        await db.close()
+
+
+# ===== 获取异步数据库连接（供统计等使用）=====
+from app.database import get_async_db

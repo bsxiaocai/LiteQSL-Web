@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理后台 - LiteQSL-Web</title>
     <script src="/static/css/tailwind.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* 表格响应式样式 */
         .overflow-x-auto {
@@ -93,6 +94,20 @@
                 <div class="text-blue-300 text-sm font-mono" id="clocks"></div>
             </div>
         </header>
+
+        <!-- 标签页导航 -->
+        <div class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4">
+                <nav class="flex space-x-8">
+                    <button id="tabManage" class="tab-btn py-4 px-1 border-b-2 border-blue-500 text-blue-600 font-medium text-sm" data-tab="manage">
+                        记录管理
+                    </button>
+                    <button id="tabStats" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm" data-tab="stats">
+                        数据统计
+                    </button>
+                </nav>
+            </div>
+        </div>
 
         <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
             <!-- ===== 手动录入 QSO ===== -->
@@ -439,9 +454,12 @@
                     <button id="filterClear" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition text-sm min-h-[44px]">清除</button>
                 </div>
                 <div class="overflow-x-auto -mx-6 px-6">
-                    <table class="w-full text-sm text-left" style="min-width: 850px;">
+                    <table class="w-full text-sm text-left" style="min-width: 900px;">
                         <thead class="bg-gray-50 text-gray-600">
                             <tr>
+                                <th class="px-3 py-2 text-center whitespace-nowrap w-10">
+                                    <input type="checkbox" id="selectAll" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                                </th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">呼号</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">日期</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">时间</th>
@@ -456,12 +474,117 @@
                         <tbody id="logsTableBody"></tbody>
                     </table>
                 </div>
+                <!-- 批量操作工具栏 -->
+                <div id="batchToolbar" class="hidden mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <span class="text-sm text-blue-800">已选择 <strong id="selectedCount">0</strong> 条记录</span>
+                        <div class="flex flex-wrap gap-2">
+                            <select id="batchStatusSelect" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">修改状态为...</option>
+                                <option value="未发送">未发送</option>
+                                <option value="已发送">已发送</option>
+                                <option value="无需发送">无需发送</option>
+                                <option value="电子确认">电子确认</option>
+                                <option value="无法考证">无法考证</option>
+                            </select>
+                            <button onclick="window.batchUpdateStatus()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm">应用状态</button>
+                            <button onclick="window.batchMarkSK(1)" class="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition text-sm">标记 SK</button>
+                            <button onclick="window.batchMarkSK(0)" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition text-sm">取消 SK</button>
+                            <button onclick="window.batchExport('adif')" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition text-sm">导出 ADIF</button>
+                            <button onclick="window.batchExport('csv')" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition text-sm">导出 CSV</button>
+                            <button onclick="window.batchDelete()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm">删除</button>
+                        </div>
+                    </div>
+                </div>
                 <!-- 分页控件 -->
                 <div id="logsPagination" class="flex items-center justify-between mt-4 text-sm">
                     <span id="logsPaginationInfo" class="text-gray-500"></span>
                     <div class="flex gap-2"></div>
                 </div>
                 <div id="noLogs" class="text-center text-gray-500 py-8 hidden">暂无记录</div>
+            </section>
+
+            <!-- ===== 数据统计 ===== -->
+            <section id="statsSection" class="hidden space-y-6">
+                <!-- 概览卡片 -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600" id="statTotalLogs">-</div>
+                        <div class="text-sm text-gray-500">总通联数</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600" id="statTotalCallsigns">-</div>
+                        <div class="text-sm text-gray-500">唯一呼号</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-purple-600" id="statThisMonth">-</div>
+                        <div class="text-sm text-gray-500">本月通联</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-orange-600" id="statThisYear">-</div>
+                        <div class="text-sm text-gray-500">本年通联</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4 text-center">
+                        <div class="text-2xl font-bold text-red-600" id="statQslPending">-</div>
+                        <div class="text-sm text-gray-500">待确认 QSL</div>
+                    </div>
+                </div>
+
+                <!-- 通联趋势折线图 -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">通联趋势（近12个月）</h3>
+                    <div class="h-64">
+                        <canvas id="chartTrend"></canvas>
+                    </div>
+                </div>
+
+                <!-- 饼图区域 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">波段分布</h3>
+                        <div class="h-64">
+                            <canvas id="chartBand"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">模式分布</h3>
+                        <div class="h-64">
+                            <canvas id="chartMode"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">QSO 类型分布</h3>
+                        <div class="h-64">
+                            <canvas id="chartType"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 通联时间分布 -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">通联时间分布（按小时 UTC）</h3>
+                    <div class="h-64">
+                        <canvas id="chartHour"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top 通联对象 -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Top 20 通联对象</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600">
+                                <tr>
+                                    <th class="px-4 py-2">排名</th>
+                                    <th class="px-4 py-2">呼号</th>
+                                    <th class="px-4 py-2">通联次数</th>
+                                    <th class="px-4 py-2">占比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topCallsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
         </main>
 

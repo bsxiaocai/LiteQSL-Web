@@ -1,4 +1,5 @@
 import sqlite3
+import aiosqlite
 import os
 import csv
 import io
@@ -66,6 +67,7 @@ def _escape_like(value: str) -> str:
 
 
 def get_conn():
+    """同步连接（仅用于初始化等同步场景）"""
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
@@ -74,12 +76,20 @@ def get_conn():
 
 @contextmanager
 def get_db():
-    """数据库连接上下文管理器，确保连接正确关闭，防止连接泄漏"""
+    """同步数据库连接上下文管理器（仅用于初始化等同步场景）"""
     conn = get_conn()
     try:
         yield conn
     finally:
         conn.close()
+
+
+async def get_async_db():
+    """异步数据库连接"""
+    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+    db = await aiosqlite.connect(DATABASE_PATH)
+    db.row_factory = aiosqlite.Row
+    return db
 
 
 def init_db():
@@ -199,50 +209,68 @@ def seed_default_settings():
         conn.commit()
 
 
-def get_setting(key: str) -> str | None:
+async def get_setting(key: str) -> str | None:
     """获取单个设置值"""
-    with get_db() as conn:
-        row = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT value FROM settings WHERE key = ?", (key,)
-        ).fetchone()
-        return row["value"] if row else None
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row["value"] if row else None
+    finally:
+        await db.close()
 
 
-def get_all_settings() -> dict:
+async def get_all_settings() -> dict:
     """获取所有设置"""
-    with get_db() as conn:
-        rows = conn.execute("SELECT key, value FROM settings").fetchall()
-        return {row["key"]: row["value"] for row in rows}
+    db = await get_async_db()
+    try:
+        async with db.execute("SELECT key, value FROM settings") as cursor:
+            rows = await cursor.fetchall()
+            return {row["key"]: row["value"] for row in rows}
+    finally:
+        await db.close()
 
 
-def update_setting(key: str, value: str) -> bool:
+async def update_setting(key: str, value: str) -> bool:
     """更新设置值"""
-    with get_db() as conn:
-        cur = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
             "ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP",
             (key, value, value),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
-def get_user(username: str) -> dict | None:
-    with get_db() as conn:
-        row = conn.execute(
+async def get_user(username: str) -> dict | None:
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT * FROM users WHERE username = ?", (username,)
-        ).fetchone()
-        return dict(row) if row else None
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    finally:
+        await db.close()
 
 
-def update_password(username: str, new_password_hash: str) -> bool:
-    with get_db() as conn:
-        cur = conn.execute(
+async def update_password(username: str, new_password_hash: str) -> bool:
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "UPDATE users SET password_hash = ?, password_version = COALESCE(password_version, 1) + 1 WHERE username = ?",
             (new_password_hash, username),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
 def _auto_fill_freq_band(data: dict) -> dict:
@@ -273,10 +301,11 @@ def _auto_fill_freq_band(data: dict) -> dict:
     return data
 
 
-def insert_log(data: dict) -> int:
+async def insert_log(data: dict) -> int:
     data = _auto_fill_freq_band(data)
-    with get_db() as conn:
-        cur = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
                                  qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -298,17 +327,20 @@ def insert_log(data: dict) -> int:
                 1 if data.get("is_sk") else 0,
                 data.get("qth", ""),
             ),
-        )
-        conn.commit()
-        return cur.lastrowid
+        ) as cursor:
+            await db.commit()
+            return cursor.lastrowid
+    finally:
+        await db.close()
 
 
-def insert_logs_batch(records: list[dict]) -> int:
-    with get_db() as conn:
+async def insert_logs_batch(records: list[dict]) -> int:
+    db = await get_async_db()
+    try:
         count = 0
         for rec in records:
             rec = _auto_fill_freq_band(rec)
-            conn.execute(
+            await db.execute(
                 """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
                                      qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -332,26 +364,36 @@ def insert_logs_batch(records: list[dict]) -> int:
                 ),
             )
             count += 1
-        conn.commit()
+        await db.commit()
         return count
+    finally:
+        await db.close()
 
 
-def search_logs_by_call(call: str) -> list[dict]:
-    with get_db() as conn:
-        rows = conn.execute(
+async def search_logs_by_call(call: str) -> list[dict]:
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC",
             (f"%{_escape_like(call)}%",),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
 
 
-def get_all_logs() -> list[dict]:
-    with get_db() as conn:
-        rows = conn.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC").fetchall()
-        return [dict(r) for r in rows]
+async def get_all_logs() -> list[dict]:
+    db = await get_async_db()
+    try:
+        async with db.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC") as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
 
 
-def get_all_logs_filtered(filters: dict = None) -> list[dict]:
+async def get_all_logs_filtered(filters: dict = None) -> list[dict]:
     """获取所有通联记录，支持可选的筛选条件（用于导出）"""
     conditions = ["1=1"]
     params = []
@@ -379,15 +421,20 @@ def get_all_logs_filtered(filters: dict = None) -> list[dict]:
             conditions.append("qso_date <= ?")
             params.append(filters["date_to"].replace("-", ""))
     where = " AND ".join(conditions)
-    with get_db() as conn:
-        rows = conn.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params).fetchall()
-        return [dict(r) for r in rows]
+    db = await get_async_db()
+    try:
+        async with db.execute(f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC", params) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()
 
 
-def update_log(log_id: int, data: dict) -> bool:
+async def update_log(log_id: int, data: dict) -> bool:
     data = _auto_fill_freq_band(data)
-    with get_db() as conn:
-        cur = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
                                comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=?, qth=? WHERE id=?""",
             (
@@ -409,28 +456,36 @@ def update_log(log_id: int, data: dict) -> bool:
                 data.get("qth", ""),
                 log_id,
             ),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
-def update_qsl_status(log_id: int, qsl_status: str) -> bool:
-    with get_db() as conn:
-        cur = conn.execute(
+async def update_qsl_status(log_id: int, qsl_status: str) -> bool:
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "UPDATE logs SET qsl_status=? WHERE id=?", (qsl_status, log_id)
-        )
-        conn.commit()
-        return cur.rowcount > 0
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
-def delete_log(log_id: int) -> bool:
-    with get_db() as conn:
-        cur = conn.execute("DELETE FROM logs WHERE id=?", (log_id,))
-        conn.commit()
-        return cur.rowcount > 0
+async def delete_log(log_id: int) -> bool:
+    db = await get_async_db()
+    try:
+        async with db.execute("DELETE FROM logs WHERE id=?", (log_id,)) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
-def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
+async def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dict:
     """分页查询通联记录，支持按呼号、波段、模式、卡片状态、QSO类型、日期范围、SK状态筛选"""
     conditions = ["1=1"]
     params = []
@@ -475,47 +530,61 @@ def get_logs_paginated(filters: dict, page: int = 1, page_size: int = 50) -> dic
     if sort_by == "qso_date":
         order_clause = f"qso_date {sort_order}, time_on {sort_order}"
 
-    with get_db() as conn:
-        total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+    db = await get_async_db()
+    try:
+        async with db.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params) as cursor:
+            row = await cursor.fetchone()
+            total = row["cnt"]
         offset = (page - 1) * page_size
-        rows = conn.execute(
+        async with db.execute(
             f"SELECT * FROM logs WHERE {where} ORDER BY {order_clause} LIMIT ? OFFSET ?",
             params + [page_size, offset],
-        ).fetchall()
-        return {
-            "logs": [dict(r) for r in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return {
+                "logs": [dict(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
+    finally:
+        await db.close()
 
 
-def check_duplicate(call: str, qso_date: str, time_on: str, band: str, mode: str) -> dict | None:
+async def check_duplicate(call: str, qso_date: str, time_on: str, band: str, mode: str) -> dict | None:
     """检测是否存在重复通联记录（联合五字段判定）"""
-    with get_db() as conn:
-        row = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND time_on = ? AND band = ? AND mode = ? LIMIT 1",
             (call, qso_date, time_on, band, mode),
-        ).fetchone()
-        return dict(row) if row else None
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    finally:
+        await db.close()
 
 
-def check_duplicate_eyeball(call: str, qso_date: str) -> dict | None:
+async def check_duplicate_eyeball(call: str, qso_date: str) -> dict | None:
     """检测是否存在重复的 Eyeball QSO 记录（呼号+日期判定）"""
-    with get_db() as conn:
-        row = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT * FROM logs WHERE call = ? AND qso_date = ? AND qso_type = 'EYEBALL' LIMIT 1",
             (call, qso_date),
-        ).fetchone()
-        return dict(row) if row else None
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+    finally:
+        await db.close()
 
 
-def check_duplicates_batch(records: list[dict]) -> list[dict]:
+async def check_duplicates_batch(records: list[dict]) -> list[dict]:
     """批量检测重复记录，返回重复记录列表"""
     duplicates = []
     for rec in records:
         rec_filled = _auto_fill_freq_band(dict(rec))
-        existing = check_duplicate(
+        existing = await check_duplicate(
             rec_filled.get("call", ""),
             rec_filled.get("qso_date", ""),
             rec_filled.get("time_on", ""),
@@ -571,24 +640,28 @@ def export_csv(records: list[dict]) -> str:
     return output.getvalue()
 
 
-def complete_first_login(username: str, new_username: str, new_password_hash: str) -> bool:
+async def complete_first_login(username: str, new_username: str, new_password_hash: str) -> bool:
     """完成首次登录：更新凭据，设置 first_login=0"""
-    with get_db() as conn:
-        existing = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT id FROM users WHERE username = ? AND username != ?",
             (new_username, username),
-        ).fetchone()
-        if existing:
-            return False
-        cur = conn.execute(
+        ) as cursor:
+            existing = await cursor.fetchone()
+            if existing:
+                return False
+        async with db.execute(
             "UPDATE users SET username = ?, password_hash = ?, first_login = 0 WHERE username = ?",
             (new_username, new_password_hash, username),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount > 0
+    finally:
+        await db.close()
 
 
-def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str = None, page: int = 1, page_size: int = 20) -> dict:
+async def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str = None, page: int = 1, page_size: int = 20) -> dict:
     """分页查询最近通联记录，支持波段、模式和QSO类型筛选"""
     conditions = ["1=1"]
     params = []
@@ -602,36 +675,126 @@ def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type: str 
         conditions.append("qso_type = ?")
         params.append(qso_type)
     where = " AND ".join(conditions)
-    with get_db() as conn:
-        total = conn.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params).fetchone()["cnt"]
+    db = await get_async_db()
+    try:
+        async with db.execute(f"SELECT COUNT(*) as cnt FROM logs WHERE {where}", params) as cursor:
+            row = await cursor.fetchone()
+            total = row["cnt"]
         offset = (page - 1) * page_size
-        rows = conn.execute(
+        async with db.execute(
             f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
             params + [page_size, offset],
-        ).fetchall()
-        return {
-            "logs": [dict(r) for r in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return {
+                "logs": [dict(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
+    finally:
+        await db.close()
 
 
-def search_logs_by_call_paginated(call: str, page: int = 1, page_size: int = 20) -> dict:
+async def search_logs_by_call_paginated(call: str, page: int = 1, page_size: int = 20) -> dict:
     """分页按呼号搜索通联记录"""
-    with get_db() as conn:
-        total = conn.execute(
+    db = await get_async_db()
+    try:
+        async with db.execute(
             "SELECT COUNT(*) as cnt FROM logs WHERE call LIKE ? ESCAPE '\\'",
             (f"%{_escape_like(call)}%",),
-        ).fetchone()["cnt"]
+        ) as cursor:
+            row = await cursor.fetchone()
+            total = row["cnt"]
         offset = (page - 1) * page_size
-        rows = conn.execute(
+        async with db.execute(
             "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
             (f"%{_escape_like(call)}%", page_size, offset),
-        ).fetchall()
-        return {
-            "logs": [dict(r) for r in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return {
+                "logs": [dict(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
+    finally:
+        await db.close()
+
+
+# ===== 批量操作 =====
+
+async def delete_logs_batch(ids: list[int]) -> int:
+    """批量删除记录，返回实际删除数量"""
+    if not ids:
+        return 0
+    # 限制单次批量操作上限
+    if len(ids) > 500:
+        raise ValueError("单次批量删除上限为 500 条")
+    placeholders = ','.join(['?'] * len(ids))
+    db = await get_async_db()
+    try:
+        async with db.execute(f"DELETE FROM logs WHERE id IN ({placeholders})", ids) as cursor:
+            await db.commit()
+            return cursor.rowcount
+    finally:
+        await db.close()
+
+
+async def update_logs_status_batch(ids: list[int], status: str) -> int:
+    """批量更新 QSL 状态，返回实际更新数量"""
+    if not ids:
+        return 0
+    if len(ids) > 500:
+        raise ValueError("单次批量操作上限为 500 条")
+    if status not in QSL_STATUSES:
+        raise ValueError(f"无效的 QSL 状态: {status}")
+    placeholders = ','.join(['?'] * len(ids))
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            f"UPDATE logs SET qsl_status = ? WHERE id IN ({placeholders})",
+            [status] + ids
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount
+    finally:
+        await db.close()
+
+
+async def update_logs_sk_batch(ids: list[int], is_sk: int) -> int:
+    """批量更新 SK 标记，返回实际更新数量"""
+    if not ids:
+        return 0
+    if len(ids) > 500:
+        raise ValueError("单次批量操作上限为 500 条")
+    if is_sk not in (0, 1):
+        raise ValueError(f"无效的 SK 标记: {is_sk}")
+    placeholders = ','.join(['?'] * len(ids))
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            f"UPDATE logs SET is_sk = ? WHERE id IN ({placeholders})",
+            [is_sk] + ids
+        ) as cursor:
+            await db.commit()
+            return cursor.rowcount
+    finally:
+        await db.close()
+
+
+async def get_logs_by_ids(ids: list[int]) -> list[dict]:
+    """根据 ID 列表获取记录"""
+    if not ids:
+        return []
+    placeholders = ','.join(['?'] * len(ids))
+    db = await get_async_db()
+    try:
+        async with db.execute(
+            f"SELECT * FROM logs WHERE id IN ({placeholders}) ORDER BY qso_date DESC, time_on DESC",
+            ids
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        await db.close()

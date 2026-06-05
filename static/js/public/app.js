@@ -10,7 +10,8 @@ import {
 
 // ===== 状态变量 =====
 let recentPage = 1, searchPage = 1;
-let lastSearchCall = '', lastRecentBand = '', lastRecentMode = '', lastRecentQsoType = '';
+let lastSearchFilters = {};
+let lastRecentBand = '', lastRecentMode = '', lastRecentQsoType = '';
 let stationCallsign = 'BH7GUL';
 let stationName = 'QSL & Log Management';
 
@@ -90,13 +91,17 @@ function loadRecent(band, mode, qsoType, page) {
 }
 
 // ===== 搜索加载 =====
-function loadSearch(call, page) {
+function loadSearch(filters, page) {
     page = page || 1;
     searchPage = page;
-    lastSearchCall = call;
+    lastSearchFilters = filters;
 
     const params = new URLSearchParams();
-    params.set('call', call);
+    if (filters.call) params.set('call', filters.call);
+    if (filters.band) params.set('band', filters.band);
+    if (filters.mode) params.set('mode', filters.mode);
+    if (filters.date_from) params.set('date_from', filters.date_from);
+    if (filters.date_to) params.set('date_to', filters.date_to);
     params.set('page', page);
     params.set('page_size', 20);
 
@@ -124,7 +129,7 @@ window.goRecentPage = function(page) {
 };
 
 window.goSearchPage = function(page) {
-    loadSearch(lastSearchCall, page);
+    loadSearch(lastSearchFilters, page);
 };
 
 // ===== 初始化 =====
@@ -163,8 +168,18 @@ export function init() {
     // 搜索表单提交
     document.getElementById('searchForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        const call = document.getElementById('searchInput').value.trim();
-        if (!call) return;
-        loadSearch(call, 1);
+        const filters = {
+            call: document.getElementById('searchInput').value.trim(),
+            band: document.getElementById('searchBand').value,
+            mode: document.getElementById('searchMode').value,
+            date_from: document.getElementById('searchDateFrom').value,
+            date_to: document.getElementById('searchDateTo').value,
+        };
+        // 至少需要一个筛选条件
+        if (!filters.call && !filters.band && !filters.mode && !filters.date_from && !filters.date_to) {
+            showToast('请至少输入一个查询条件', 'error');
+            return;
+        }
+        loadSearch(filters, 1);
     });
 }

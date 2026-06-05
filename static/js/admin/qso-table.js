@@ -68,7 +68,7 @@ function renderLogsTable(data) {
     if (!tbody) return;
 
     if (data.logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-4 text-center text-gray-500">暂无记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-4 text-center text-gray-500">暂无记录</td></tr>';
         return;
     }
 
@@ -83,6 +83,9 @@ function renderLogsTable(data) {
         const rstDisplay = `${escapeHtml(log.rst_sent) || '-'}/${escapeHtml(log.rst_rcvd) || '-'}`;
 
         return `<tr class="border-b hover:bg-gray-50">
+            <td class="px-3 py-2 text-center">
+                <input type="checkbox" class="log-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" value="${log.id}" onchange="window.updateBatchToolbar()">
+            </td>
             <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
             <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(formatDate(log.qso_date))}</td>
             <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(timeDisplay)}</td>
@@ -170,32 +173,257 @@ export function initFilters() {
 
     if (filterApply) {
         filterApply.addEventListener('click', function() {
-            const filters = {
-                call: document.getElementById('filterCall')?.value || '',
-                band: document.getElementById('filterBand')?.value || '',
-                mode: document.getElementById('filterMode')?.value || '',
-                qsl_status: document.getElementById('filterStatus')?.value || '',
-                qso_type: document.getElementById('filterQsoType')?.value || '',
-                date_from: document.getElementById('filterDateFrom')?.value || '',
-                date_to: document.getElementById('filterDateTo')?.value || '',
-                is_sk: document.getElementById('filterSK')?.value || ''
-            };
+            const filters = getFilterValues();
             loadLogs(1, filters);
+            syncFiltersToURL(filters, 1);
         });
     }
 
     if (filterClear) {
         filterClear.addEventListener('click', function() {
-            document.getElementById('filterCall').value = '';
-            document.getElementById('filterBand').value = '';
-            document.getElementById('filterMode').value = '';
-            document.getElementById('filterStatus').value = '';
-            document.getElementById('filterQsoType').value = '';
-            document.getElementById('filterDateFrom').value = '';
-            document.getElementById('filterDateTo').value = '';
-            document.getElementById('filterSK').value = '';
+            clearFilterInputs();
             loadLogs(1, {});
+            syncFiltersToURL({}, 1);
         });
+    }
+
+    // 从 URL 加载筛选条件
+    loadFiltersFromURL();
+}
+
+// 获取筛选条件值
+function getFilterValues() {
+    return {
+        call: document.getElementById('filterCall')?.value || '',
+        band: document.getElementById('filterBand')?.value || '',
+        mode: document.getElementById('filterMode')?.value || '',
+        qsl_status: document.getElementById('filterStatus')?.value || '',
+        qso_type: document.getElementById('filterQsoType')?.value || '',
+        date_from: document.getElementById('filterDateFrom')?.value || '',
+        date_to: document.getElementById('filterDateTo')?.value || '',
+        is_sk: document.getElementById('filterSK')?.value || ''
+    };
+}
+
+// 清空筛选输入框
+function clearFilterInputs() {
+    document.getElementById('filterCall').value = '';
+    document.getElementById('filterBand').value = '';
+    document.getElementById('filterMode').value = '';
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterQsoType').value = '';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterSK').value = '';
+}
+
+// 设置筛选输入框值
+function setFilterValues(filters) {
+    if (filters.call) document.getElementById('filterCall').value = filters.call;
+    if (filters.band) document.getElementById('filterBand').value = filters.band;
+    if (filters.mode) document.getElementById('filterMode').value = filters.mode;
+    if (filters.qsl_status) document.getElementById('filterStatus').value = filters.qsl_status;
+    if (filters.qso_type) document.getElementById('filterQsoType').value = filters.qso_type;
+    if (filters.date_from) document.getElementById('filterDateFrom').value = filters.date_from;
+    if (filters.date_to) document.getElementById('filterDateTo').value = filters.date_to;
+    if (filters.is_sk) document.getElementById('filterSK').value = filters.is_sk;
+}
+
+// 同步筛选条件到 URL
+function syncFiltersToURL(filters, page) {
+    const params = new URLSearchParams();
+    if (filters.call) params.set('call', filters.call);
+    if (filters.band) params.set('band', filters.band);
+    if (filters.mode) params.set('mode', filters.mode);
+    if (filters.qsl_status) params.set('qsl_status', filters.qsl_status);
+    if (filters.qso_type) params.set('qso_type', filters.qso_type);
+    if (filters.date_from) params.set('date_from', filters.date_from);
+    if (filters.date_to) params.set('date_to', filters.date_to);
+    if (filters.is_sk) params.set('is_sk', filters.is_sk);
+    if (page > 1) params.set('page', page);
+
+    const queryString = params.toString();
+    const newURL = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+    history.replaceState(null, '', newURL);
+}
+
+// 从 URL 加载筛选条件
+function loadFiltersFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.toString() === '') return;
+
+    const filters = {
+        call: params.get('call') || '',
+        band: params.get('band') || '',
+        mode: params.get('mode') || '',
+        qsl_status: params.get('qsl_status') || '',
+        qso_type: params.get('qso_type') || '',
+        date_from: params.get('date_from') || '',
+        date_to: params.get('date_to') || '',
+        is_sk: params.get('is_sk') || ''
+    };
+
+    const page = parseInt(params.get('page')) || 1;
+
+    // 设置筛选输入框
+    setFilterValues(filters);
+
+    // 加载数据
+    loadLogs(page, filters);
+}
+
+// ===== 批量操作 =====
+
+// 获取选中的记录 ID
+function getSelectedIds() {
+    const checkboxes = document.querySelectorAll('.log-checkbox:checked');
+    return Array.from(checkboxes).map(cb => parseInt(cb.value));
+}
+
+// 更新批量操作工具栏显示
+function updateBatchToolbar() {
+    const ids = getSelectedIds();
+    const toolbar = document.getElementById('batchToolbar');
+    const countEl = document.getElementById('selectedCount');
+
+    if (ids.length > 0) {
+        toolbar.classList.remove('hidden');
+        countEl.textContent = ids.length;
+    } else {
+        toolbar.classList.add('hidden');
+    }
+}
+
+// 全选/取消全选
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.log-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = selectAll.checked;
+    });
+    updateBatchToolbar();
+}
+
+// 批量删除
+async function batchDelete() {
+    const ids = getSelectedIds();
+    if (!ids.length) {
+        showToast('请先选择要删除的记录', 'error');
+        return;
+    }
+    if (!confirm(`确定要删除 ${ids.length} 条记录吗？此操作不可撤销。`)) return;
+
+    try {
+        const resp = await fetch('/api/admin/logs/batch-delete', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ ids })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+            showToast(`成功删除 ${data.deleted} 条记录`, 'success');
+            loadLogs(currentPage, currentFilters);
+        } else {
+            showToast(data.detail || '批量删除失败', 'error');
+        }
+    } catch (err) {
+        showToast('请求失败', 'error');
+    }
+}
+
+// 批量修改 QSL 状态
+async function batchUpdateStatus() {
+    const ids = getSelectedIds();
+    const status = document.getElementById('batchStatusSelect').value;
+
+    if (!ids.length) {
+        showToast('请先选择要修改的记录', 'error');
+        return;
+    }
+    if (!status) {
+        showToast('请选择目标状态', 'error');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/admin/logs/batch-status', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ ids, status })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+            showToast(`成功更新 ${data.updated} 条记录状态`, 'success');
+            loadLogs(currentPage, currentFilters);
+        } else {
+            showToast(data.detail || '批量更新失败', 'error');
+        }
+    } catch (err) {
+        showToast('请求失败', 'error');
+    }
+}
+
+// 批量修改 SK 标记
+async function batchMarkSK(is_sk) {
+    const ids = getSelectedIds();
+    if (!ids.length) {
+        showToast('请先选择要修改的记录', 'error');
+        return;
+    }
+
+    const action = is_sk ? '标记为 SK' : '取消 SK 标记';
+    if (!confirm(`确定要将 ${ids.length} 条记录${action}吗？`)) return;
+
+    try {
+        const resp = await fetch('/api/admin/logs/batch-sk', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ ids, is_sk })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+            showToast(`成功${action} ${data.updated} 条记录`, 'success');
+            loadLogs(currentPage, currentFilters);
+        } else {
+            showToast(data.detail || '批量更新失败', 'error');
+        }
+    } catch (err) {
+        showToast('请求失败', 'error');
+    }
+}
+
+// 批量导出
+async function batchExport(format) {
+    const ids = getSelectedIds();
+    if (!ids.length) {
+        showToast('请先选择要导出的记录', 'error');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/api/admin/logs/batch-export', {
+            method: 'POST',
+            headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ ids, format })
+        });
+
+        if (resp.ok) {
+            const blob = await resp.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `qsl_export_${new Date().toISOString().slice(0, 10)}.${format === 'adif' ? 'adi' : 'csv'}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            showToast(`成功导出 ${ids.length} 条记录`, 'success');
+        } else {
+            const data = await resp.json();
+            showToast(data.detail || '导出失败', 'error');
+        }
+    } catch (err) {
+        showToast('请求失败', 'error');
     }
 }
 
@@ -203,6 +431,7 @@ export function initFilters() {
 export function registerGlobalFunctions() {
     window.goToPage = function(page) {
         loadLogs(page, currentFilters);
+        syncFiltersToURL(currentFilters, page);
     };
 
     window.updateLogStatus = updateLogStatus;
@@ -210,4 +439,17 @@ export function registerGlobalFunctions() {
     window.openEditModal = function(id) {
         // 由 edit-modal.js 注册
     };
+
+    // 批量操作相关
+    window.updateBatchToolbar = updateBatchToolbar;
+    window.batchDelete = batchDelete;
+    window.batchUpdateStatus = batchUpdateStatus;
+    window.batchMarkSK = batchMarkSK;
+    window.batchExport = batchExport;
+
+    // 全选复选框事件
+    const selectAll = document.getElementById('selectAll');
+    if (selectAll) {
+        selectAll.addEventListener('change', toggleSelectAll);
+    }
 }

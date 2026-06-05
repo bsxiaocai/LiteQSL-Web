@@ -11,6 +11,7 @@ import { initImportExport } from './import-export.js';
 import { initBackup } from './backup.js';
 import { initSettings } from './settings.js';
 import { startClock } from '../common/clock.js';
+import { initTabs } from './stats.js';
 
 // 显示管理后台
 function showAdmin() {
@@ -26,6 +27,7 @@ function showAdmin() {
     initImportExport();
     initBackup();
     initSettings();
+    initTabs();
 
     // 检查首次登录
     checkFirstLogin();
