@@ -68,7 +68,7 @@ function renderLogsTable(data) {
     if (!tbody) return;
 
     if (data.logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-4 text-center text-gray-500">暂无记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-4 text-center text-gray-500">暂无记录</td></tr>';
         return;
     }
 
@@ -80,6 +80,7 @@ function renderLogsTable(data) {
         }
 
         const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
+        const rstDisplay = `${escapeHtml(log.rst_sent) || '-'}/${escapeHtml(log.rst_rcvd) || '-'}`;
 
         return `<tr class="border-b hover:bg-gray-50">
             <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
@@ -88,8 +89,7 @@ function renderLogsTable(data) {
             <td class="px-3 py-2 text-gray-600">${formatFreqCell(log)}</td>
             <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(log.mode) || '-'}</td>
             <td class="px-3 py-2 whitespace-nowrap">${formatTypeBadge(log.qso_type, log.qth)}</td>
-            <td class="px-3 py-2 text-center whitespace-nowrap">${escapeHtml(log.rst_sent) || '-'}</td>
-            <td class="px-3 py-2 text-center whitespace-nowrap">${escapeHtml(log.rst_rcvd) || '-'}</td>
+            <td class="px-3 py-2 text-center whitespace-nowrap">${rstDisplay}</td>
             <td class="px-3 py-2 whitespace-nowrap">
                 <select onchange="window.updateLogStatus(${log.id}, this.value)" class="text-xs border rounded px-1 py-0.5">
                     ${QSL_STATUSES.map(s => `<option value="${s}" ${s === log.qsl_status ? 'selected' : ''}>${s}</option>`).join('')}

@@ -442,14 +442,13 @@
                     <table class="w-full text-sm text-left" style="min-width: 850px;">
                         <thead class="bg-gray-50 text-gray-600">
                             <tr>
-                                <th class="px-3 py-2 text-center whitespace-nowrap">ID</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">呼号</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">日期</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">时间</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">频率/波段</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">模式</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">类型</th>
-                                <th class="px-3 py-2 text-center whitespace-nowrap">RST</th>
+                                <th class="px-3 py-2 text-center whitespace-nowrap">收发RST</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">卡片状态</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">操作</th>
                             </tr>
@@ -458,9 +457,9 @@
                     </table>
                 </div>
                 <!-- 分页控件 -->
-                <div id="pagination" class="flex items-center justify-between mt-4 text-sm">
-                    <span id="paginationInfo" class="text-gray-500"></span>
-                    <div class="flex gap-2" id="paginationButtons"></div>
+                <div id="logsPagination" class="flex items-center justify-between mt-4 text-sm">
+                    <span id="logsPaginationInfo" class="text-gray-500"></span>
+                    <div class="flex gap-2"></div>
                 </div>
                 <div id="noLogs" class="text-center text-gray-500 py-8 hidden">暂无记录</div>
             </section>

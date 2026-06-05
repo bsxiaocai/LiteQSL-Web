@@ -26,7 +26,7 @@ export function openEditModal(id) {
     document.getElementById('editQsoType').value = log.qso_type || 'NORMAL';
     document.getElementById('editQslStatus').value = log.qsl_status || '未发送';
     document.getElementById('editComment').value = log.comment || '';
-    document.getElementById('editIsSk').checked = log.is_sk ? true : false;
+    document.getElementById('editIsSkCheck').checked = log.is_sk ? true : false;
 
     // 根据类型填充特定字段
     toggleEditFields(log.qso_type);
@@ -96,7 +96,7 @@ function collectEditData() {
     data.qso_type = qsoType;
     data.qsl_status = document.getElementById('editQslStatus').value;
     data.comment = document.getElementById('editComment').value.trim();
-    data.is_sk = document.getElementById('editIsSk').checked ? 1 : 0;
+    data.is_sk = document.getElementById('editIsSkCheck').checked ? 1 : 0;
 
     if (qsoType === 'SAT') {
         data.sat_name = document.getElementById('editSatName').value.trim();
