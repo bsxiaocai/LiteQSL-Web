@@ -20,7 +20,7 @@ def setup_session_middleware(app):
     )
 
 
-def check_admin(request: Request) -> bool:
+async def check_admin(request: Request) -> bool:
     """检查是否已登录，并校验 session 中的密码版本是否与数据库一致"""
     username = request.session.get("username")
     if not username:
@@ -29,20 +29,20 @@ def check_admin(request: Request) -> bool:
     session_version = request.session.get("password_version")
     if session_version is not None:
         from app.database import get_user
-        user = get_user(username)
+        user = await get_user(username)
         if not user or user.get("password_version", 1) != session_version:
             request.session.clear()
             return False
     return True
 
 
-def require_admin(request: Request, allow_first_login: bool = False):
-    if not check_admin(request):
+async def require_admin(request: Request, allow_first_login: bool = False):
+    if not await check_admin(request):
         raise HTTPException(status_code=401, detail="未登录")
     # 首次登录未完成时，阻止所有管理操作（除允许的接口外）
     if not allow_first_login:
         from app.database import get_user
-        user = get_user(request.session["username"])
+        user = await get_user(request.session["username"])
         if user and user.get("first_login", 0):
             raise HTTPException(status_code=403, detail="请先完成首次登录凭据修改")
 

@@ -38,9 +38,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/csrf-token")
-def get_csrf_token(request: Request):
+async def get_csrf_token(request: Request):
     """获取 CSRF Token（需先登录，首次登录期间也可用）"""
-    require_admin(request, allow_first_login=True)
+    await require_admin(request, allow_first_login=True)
     token = generate_csrf_token(request)
     return {"csrf_token": token}
 
@@ -92,7 +92,7 @@ def logout(request: Request):
 
 @router.get("/check")
 async def check_login(request: Request):
-    if not check_admin(request):
+    if not await check_admin(request):
         return {"logged_in": False}
     user = await get_user(request.session["username"])
     return {"logged_in": True, "first_login": bool(user.get("first_login", 0)) if user else False}
@@ -100,7 +100,7 @@ async def check_login(request: Request):
 
 @router.post("/change-password")
 async def change_password(request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     old_password = body.get("old_password", "")
@@ -122,7 +122,7 @@ async def change_password(request: Request):
 
 @router.get("/first-login-status")
 async def first_login_status(request: Request):
-    require_admin(request, allow_first_login=True)
+    await require_admin(request, allow_first_login=True)
     user = await get_user(request.session["username"])
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
@@ -131,7 +131,7 @@ async def first_login_status(request: Request):
 
 @router.post("/complete-first-login")
 async def complete_first_login_endpoint(request: Request):
-    require_admin(request, allow_first_login=True)
+    await require_admin(request, allow_first_login=True)
     validate_csrf_token(request)
     body = await request.json()
     old_password = body.get("old_password", "")
@@ -192,7 +192,7 @@ def get_qso_types():
 
 @router.post("/logs")
 async def add_log(request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     data = await request.json()
 
@@ -253,7 +253,7 @@ async def add_log(request: Request):
 
 @router.put("/logs/{log_id}")
 async def edit_log(log_id: int, request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     data = await request.json()
 
@@ -285,7 +285,7 @@ async def edit_log(log_id: int, request: Request):
 
 @router.put("/logs/{log_id}/status")
 async def change_status(log_id: int, request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     status = body.get("qsl_status", "")
@@ -298,7 +298,7 @@ async def change_status(log_id: int, request: Request):
 
 @router.delete("/logs/{log_id}")
 async def remove_log(log_id: int, request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     if not await delete_log(log_id):
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -321,7 +321,7 @@ async def list_all_logs(
     sort_by: str = Query(None),
     sort_order: str = Query(None),
 ):
-    require_admin(request)
+    await require_admin(request)
     filters = {}
     if call:
         filters["call"] = call
@@ -348,7 +348,7 @@ async def list_all_logs(
 
 @router.post("/import-adif")
 async def import_adif(request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     form = await request.form()
     file = form.get("file")
@@ -397,7 +397,7 @@ async def export_adif_file(
     date_from: str = Query(None),
     date_to: str = Query(None),
 ):
-    require_admin(request)
+    await require_admin(request)
     filters = {}
     if band:
         filters["band"] = band
@@ -431,7 +431,7 @@ async def export_csv_file(
     date_from: str = Query(None),
     date_to: str = Query(None),
 ):
-    require_admin(request)
+    await require_admin(request)
     filters = {}
     if band:
         filters["band"] = band
@@ -459,7 +459,7 @@ async def export_csv_file(
 
 @router.post("/backup")
 def backup_database(request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     result = create_backup()
     return {"ok": True, "backup": result}
@@ -467,13 +467,13 @@ def backup_database(request: Request):
 
 @router.get("/backups")
 def backup_list(request: Request):
-    require_admin(request)
+    await require_admin(request)
     return {"backups": list_backups()}
 
 
 @router.get("/backups/{filename}")
 def download_backup(filename: str, request: Request):
-    require_admin(request)
+    await require_admin(request)
     path = get_backup_path(filename)
     if not path:
         raise HTTPException(status_code=404, detail="备份文件不存在")
@@ -486,7 +486,7 @@ def download_backup(filename: str, request: Request):
 
 @router.delete("/backups/{filename}")
 def remove_backup(filename: str, request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     if not delete_backup(filename):
         raise HTTPException(status_code=404, detail="备份文件不存在")
@@ -495,7 +495,7 @@ def remove_backup(filename: str, request: Request):
 
 @router.post("/restore")
 async def restore_database(request: Request):
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     filename = body.get("filename", "")
@@ -514,7 +514,7 @@ async def restore_database(request: Request):
 @router.get("/settings")
 async def get_settings(request: Request):
     """获取所有系统设置"""
-    require_admin(request)
+    await require_admin(request)
     from app.database import get_all_settings
     return {"settings": await get_all_settings()}
 
@@ -522,7 +522,7 @@ async def get_settings(request: Request):
 @router.put("/settings")
 async def update_settings(request: Request):
     """更新系统设置"""
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     from app.database import update_setting
@@ -546,7 +546,7 @@ async def update_settings(request: Request):
 @router.post("/logs/batch-delete")
 async def batch_delete_logs(request: Request):
     """批量删除记录"""
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     ids = body.get("ids", [])
@@ -564,7 +564,7 @@ async def batch_delete_logs(request: Request):
 @router.post("/logs/batch-status")
 async def batch_update_status(request: Request):
     """批量修改 QSL 状态"""
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     ids = body.get("ids", [])
@@ -583,7 +583,7 @@ async def batch_update_status(request: Request):
 @router.post("/logs/batch-sk")
 async def batch_update_sk(request: Request):
     """批量修改 SK 标记"""
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     ids = body.get("ids", [])
@@ -602,7 +602,7 @@ async def batch_update_sk(request: Request):
 @router.post("/logs/batch-export")
 async def batch_export(request: Request):
     """批量导出选中记录"""
-    require_admin(request)
+    await require_admin(request)
     validate_csrf_token(request)
     body = await request.json()
     ids = body.get("ids", [])
@@ -637,7 +637,7 @@ async def batch_export(request: Request):
 @router.get("/stats/summary")
 async def stats_summary(request: Request):
     """获取统计数据概览"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         # 总通联数
@@ -685,7 +685,7 @@ async def stats_summary(request: Request):
 @router.get("/stats/by-band")
 async def stats_by_band(request: Request):
     """按波段统计"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
@@ -700,7 +700,7 @@ async def stats_by_band(request: Request):
 @router.get("/stats/by-mode")
 async def stats_by_mode(request: Request):
     """按模式统计"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
@@ -715,7 +715,7 @@ async def stats_by_mode(request: Request):
 @router.get("/stats/by-type")
 async def stats_by_type(request: Request):
     """按 QSO 类型统计"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
@@ -730,7 +730,7 @@ async def stats_by_type(request: Request):
 @router.get("/stats/by-month")
 async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60)):
     """按月统计通联数量"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
@@ -747,7 +747,7 @@ async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60))
 @router.get("/stats/by-hour")
 async def stats_by_hour(request: Request):
     """按小时统计通联分布"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
@@ -764,7 +764,7 @@ async def stats_by_hour(request: Request):
 @router.get("/stats/top-calls")
 async def stats_top_calls(request: Request, limit: int = Query(20, ge=1, le=100)):
     """Top 通联对象"""
-    require_admin(request)
+    await require_admin(request)
     db = await get_async_db()
     try:
         async with db.execute(
