@@ -189,7 +189,8 @@ export async function init() {
     const loginStatus = await checkLogin();
 
     if (loginStatus.logged_in) {
-        // 已登录，显示管理后台
+        // 已登录，获取 CSRF token 后显示管理后台
+        await fetchCsrfToken();
         showAdmin();
     } else {
         // 未登录，显示登录表单
