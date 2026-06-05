@@ -4,7 +4,9 @@
 
 现代化、简洁、具有无线电特色的在线日志展示系统，适用于个人或小集体台使用。
 
-> **当前版本：v1.1.0** | [更新日志与v1.1.0 发布说明](doc/v1.1.0-changelog.md)
+> **当前版本：v1.2.0** | [更新日志](doc/v1.2.0-changelog.md) | [短期改进计划](doc/short-term-plan.md)
+
+---
 
 ## 功能特性
 
@@ -19,13 +21,6 @@
 - **卡片状态管理** — 支持五种状态：无法考证、未发送、已发送、无需发送、电子确认
 - **重复通联检测** — 手动录入与 ADIF 导入时自动检测重复 QSO，支持强制导入
 
-### 频率与波段
-
-- **频率优先录入** — 用户仅需输入频率（如 `14.270`），系统自动识别波段（如 `20m`）
-- **自动波段识别** — 覆盖 160m ~ 23cm 共 14 个 ITU Region 3 业余频段
-- **前端实时提示** — 输入频率后即时显示识别结果
-- **ADIF 频率兼容** — 导入时自动处理 kHz ↔ MHz 转换
-
 ### QSO 类型系统
 
 支持四种 QSO 类型，适配不同通联场景：
@@ -35,14 +30,28 @@
 | `NORMAL` | 一般通联 | HF/VHF/UHF 常规通联 | 单频率，如 `14.270 MHz` |
 | `SAT` | 🛰 卫星通联 | 支持上下行频率 + 卫星名称 | `145.850 ↑ / 436.795 ↓` |
 | `REP` | 📡 中继通联 | 支持输入输出频率 + 频差计算 | `439.600 (-5.0MHz)` |
-| `EYEBALL` | 👀 Eyeball通联 | 线下面对面交流，频率/模式可选 | 可为空 |
+| `EYEBALL` | 👀 Eyeball QSO | 线下面对面交流，频率/模式可选 | 可为空 |
+
+### 高级搜索与筛选
+
+管理后台支持多条件组合筛选：
+
+- 呼号（模糊搜索）
+- 波段、模式、卡片状态、QSO 类型（精确匹配）
+- 日期范围（起始日期 ~ 结束日期）
+- SK 状态（正常/SK）
+
+导出功能（ADIF/CSV）同样支持筛选条件。
 
 ### 后台管理
 
-- **分页与筛选** — 支持按呼号、波段、模式、卡片状态、QSO 类型筛选
+- **呼号配置** — 支持自定义操作员呼号和站点名称，自动替换访客界面显示
+- **自动日期时间** — 录入时自动填充日期和 UTC 时间，支持「今天」「现在 UTC」快捷按钮
+- **分页与筛选** — 支持多条件组合筛选，高效管理大量记录
 - **首次登录强制改密** — 默认管理员首次登录后必须修改用户名和密码
 - **密码修改** — 支持修改管理员密码，含实时强度校验
 - **数据库备份与恢复** — 支持一键备份、下载、删除、恢复数据库
+- **密码重置** — 提供 `reset_password.py` 脚本，支持在服务器端重置密码
 
 ### 用户体验
 
@@ -55,19 +64,27 @@
 ### 安全特性
 
 - **bcrypt 密码哈希** — 使用 bcrypt 算法（rounds=12）存储密码，自动升级旧 SHA-256 哈希
+- **CSRF 防护** — 所有状态修改请求需要验证 CSRF Token
 - **登录频率限制** — IP 级别防暴力破解，5 次失败后锁定 10 分钟
 - **SQL 注入防护** — 全部查询使用参数化占位符，LIKE 查询转义通配符
+- **XSS 防护** — 所有用户输入经过 HTML 转义
 - **路径穿越防护** — 备份文件名校验，防止目录遍历攻击
 - **反向代理兼容** — 正确处理 X-Forwarded-For / X-Real-IP 头
 
+---
+
 ## 技术栈
 
-- **后端：** Python 3.10+ / FastAPI / Uvicorn
-- **数据库：** SQLite
-- **前端：** 原生 HTML + JavaScript + Tailwind CSS（CDN）
-- **密码哈希：** bcrypt
+| 层级 | 技术 |
+|------|------|
+| 后端 | Python 3.10+ / FastAPI / Uvicorn |
+| 数据库 | SQLite |
+| 前端 | 原生 HTML + JavaScript (ES Module) + Tailwind CSS (本地) |
+| 密码哈希 | bcrypt |
 
-## 本地开发
+---
+
+## 快速开始
 
 ### 1. 克隆项目
 
@@ -110,13 +127,35 @@ python run.py
 
 在终端按 `Ctrl + C` 即可停止。
 
+---
+
+## 密码管理
+
+### 重置密码
+
+如果忘记管理员密码，可使用 `reset_password.py` 脚本重置：
+
+```bash
+# 重置 admin 密码为默认值 Admin123!
+python reset_password.py
+
+# 列出所有用户
+python reset_password.py --list
+
+# 重置指定用户的密码
+python reset_password.py 用户名 新密码
+```
+
+---
+
 ## 服务端部署
 
 ### 环境变量
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `SECRET_KEY` | Session 加密密钥，**生产环境必须修改** | `change-this-secret-key-in-production` |
+| `SECRET_KEY` | Session 加密密钥，**生产环境必须修改** | 自动生成并保存到 `data/.secret_key` |
+| `TRUST_PROXY` | 是否信任反向代理头 | `false` |
 
 ### 登录限流配置
 
@@ -187,57 +226,16 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-> **说明：**
-> - `User=www-data` 可替换为你实际的运行用户（如 `ubuntu`、`debian` 等）
-> - `SECRET_KEY` 请替换为一个随机生成的长字符串，例如用 `openssl rand -hex 32` 生成
-> - `ReadWritePaths` 指向数据目录，确保进程有写入权限
-
-#### 3. 设置文件权限
+#### 3. 启动服务
 
 ```bash
-# 如果使用 www-data 用户
-sudo chown -R www-data:www-data /opt/LiteQSL-Web
-
-# 如果使用其他用户（如 ubuntu）
-# sudo chown -R ubuntu:ubuntu /opt/LiteQSL-Web
-```
-
-#### 4. 启动服务
-
-```bash
-# 重载 systemd 配置
 sudo systemctl daemon-reload
-
-# 启动服务
 sudo systemctl start liteqsl
-
-# 设置开机自启
 sudo systemctl enable liteqsl
-
-# 查看运行状态
 sudo systemctl status liteqsl
 ```
 
-#### 5. 常用管理命令
-
-```bash
-# 查看服务状态
-sudo systemctl status liteqsl
-
-# 查看实时日志
-sudo journalctl -u liteqsl -f
-
-# 重启服务
-sudo systemctl restart liteqsl
-
-# 停止服务
-sudo systemctl stop liteqsl
-
-# 禁用开机自启
-sudo systemctl disable liteqsl
-```
-
-#### 6. 配置 Nginx 反向代理（可选）
+#### 4. 配置 Nginx 反向代理（可选）
 
 ```nginx
 server {
@@ -257,14 +255,14 @@ server {
 }
 ```
 
-系统会自动从 `X-Forwarded-For` 和 `X-Real-IP` 头中获取真实客户端 IP，用于登录限流。
-
 如需 HTTPS，推荐使用 Certbot 自动配置 Let's Encrypt 证书：
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d qsl.example.com
 ```
+
+---
 
 ## 项目结构
 
@@ -281,16 +279,45 @@ LiteQSL-Web/
 │   └── routes/
 │       ├── __init__.py
 │       ├── public.py         # 公开 API（查询、分页）
-│       └── admin.py          # 管理 API（CRUD、导入导出、备份）
+│       └── admin.py          # 管理 API（CRUD、导入导出、备份、设置）
 ├── static/
 │   ├── index.html            # 公共查询页
-│   └── admin.html            # 后台管理页
+│   ├── admin.html            # 后台管理页
+│   ├── css/
+│   │   └── tailwind.js       # Tailwind CSS（本地）
+│   └── js/
+│       ├── common/           # 公共模块
+│       │   ├── utils.js      # 工具函数
+│       │   ├── constants.js  # 常量定义
+│       │   ├── formatters.js # 格式化函数
+│       │   ├── pagination.js # 分页组件
+│       │   ├── clock.js      # 时钟组件
+│       │   └── index.js      # 统一导出
+│       ├── public/
+│       │   └── app.js        # 公开页面主逻辑
+│       └── admin/
+│           ├── app.js        # 管理后台主入口
+│           ├── auth.js       # 登录认证
+│           ├── qso-form.js   # QSO 表单
+│           ├── qso-table.js  # 记录表格
+│           ├── edit-modal.js # 编辑弹窗
+│           ├── import-export.js # 导入导出
+│           ├── backup.js     # 备份管理
+│           └── settings.js   # 系统设置
 ├── data/                     # SQLite 数据库（自动生成）
 │   └── backups/              # 数据库备份（自动生成）
+├── doc/
+│   ├── v1.0.0-changelog.md   # v1.0.0 更新日志
+│   ├── v1.1.0-changelog.md   # v1.1.0 更新日志
+│   ├── v1.2.0-changelog.md   # v1.2.0 更新日志
+│   └── short-term-plan.md    # 短期改进计划
 ├── config.py                 # 配置文件
 ├── requirements.txt          # Python 依赖
+├── reset_password.py         # 密码重置脚本
 └── run.py                    # 启动脚本
 ```
+
+---
 
 ## 数据库说明
 
@@ -317,8 +344,28 @@ LiteQSL-Web/
 | `rst_rcvd` | TEXT | 接收的 RST 信号报告 |
 | `qsl_status` | TEXT | 卡片状态 |
 | `is_sk` | INTEGER | Silent Key 标识（0=否，1=是） |
+| `qth` | TEXT | 地点（Eyeball QSO 用） |
 | `comment` | TEXT | 备注 |
 | `created_at` | TIMESTAMP | 记录创建时间 |
+
+#### 系统设置表（settings）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `key` | TEXT | 设置键名（主键） |
+| `value` | TEXT | 设置值 |
+| `updated_at` | TIMESTAMP | 更新时间 |
+
+#### 用户表（users）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | INTEGER | 主键，自增 |
+| `username` | TEXT | 用户名（唯一） |
+| `password_hash` | TEXT | 密码哈希 |
+| `first_login` | INTEGER | 首次登录标识（0=否，1=是） |
+| `password_version` | INTEGER | 密码版本（用于 session 失效） |
+| `created_at` | TIMESTAMP | 创建时间 |
 
 ### 数据库索引
 
@@ -331,9 +378,7 @@ LiteQSL-Web/
 - `logs.qsl_status` — 卡片状态
 - `logs.qso_type` — QSO 类型
 
-### 数据库备份
-
-备份文件存储在 `data/backups/` 目录，使用 SQLite backup API 创建一致性快照。恢复数据库前会自动备份当前状态，防止误操作。
+---
 
 ## ADIF 兼容性
 
@@ -362,6 +407,48 @@ LiteQSL-Web/
 - **普通 QSO**：导出 `FREQ`（MHz → kHz）+ `BAND`
 - **卫星 QSO**：导出 `PROP_MODE=SAT` + `SAT_NAME` + `TX_FREQ` + `RX_FREQ` + `FREQ_RX`
 - **中继 QSO**：导出 `TX_FREQ` + `RX_FREQ` + `FREQ_RX`
+- **Eyeball QSO**：不导出（无频率信息）
+
+---
+
+## API 文档
+
+### 公开 API（无需登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/station-info` | 获取电台信息（呼号、站点名称） |
+| GET | `/api/recent` | 获取最近通联记录（支持分页和筛选） |
+| GET | `/api/search` | 按呼号搜索通联记录 |
+
+### 管理 API（需要登录）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/admin/login` | 登录 |
+| POST | `/api/admin/logout` | 登出 |
+| GET | `/api/admin/check` | 检查登录状态 |
+| GET | `/api/admin/csrf-token` | 获取 CSRF Token |
+| GET | `/api/admin/first-login-status` | 检查首次登录状态 |
+| POST | `/api/admin/complete-first-login` | 完成首次登录 |
+| POST | `/api/admin/change-password` | 修改密码 |
+| GET | `/api/admin/logs` | 获取通联记录（支持分页和高级筛选） |
+| POST | `/api/admin/logs` | 添加通联记录 |
+| PUT | `/api/admin/logs/{id}` | 更新通联记录 |
+| DELETE | `/api/admin/logs/{id}` | 删除通联记录 |
+| PUT | `/api/admin/logs/{id}/status` | 更新卡片状态 |
+| POST | `/api/admin/import-adif` | 导入 ADIF 文件 |
+| GET | `/api/admin/export-adif` | 导出 ADIF 文件 |
+| GET | `/api/admin/export-csv` | 导出 CSV 文件 |
+| GET | `/api/admin/settings` | 获取系统设置 |
+| PUT | `/api/admin/settings` | 更新系统设置 |
+| POST | `/api/admin/backup` | 创建备份 |
+| GET | `/api/admin/backups` | 获取备份列表 |
+| GET | `/api/admin/backups/{filename}` | 下载备份 |
+| DELETE | `/api/admin/backups/{filename}` | 删除备份 |
+| POST | `/api/admin/restore` | 恢复备份 |
+
+---
 
 ## 依赖说明
 
@@ -372,6 +459,20 @@ LiteQSL-Web/
 | python-multipart | 0.0.20 | 文件上传支持 |
 | itsdangerous | 2.2.0 | Session 签名 |
 | bcrypt | >=4.0.0 | 密码哈希 |
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 主要更新 |
+|------|------|---------|
+| v1.2.0 | 2026-06-05 | 前端模块化重构、高级搜索、自动日期时间、呼号配置 |
+| v1.1.0 | 2026-05-29 | QSO 类型系统、Eyeball QSO、首次登录改密 |
+| v1.0.0 | 2026-05-20 | 初始版本，核心功能发布 |
+
+详细更新日志请查看 [doc/](doc/) 目录。
+
+---
 
 ## 免责声明
 
