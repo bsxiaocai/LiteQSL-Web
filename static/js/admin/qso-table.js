@@ -34,6 +34,20 @@ export async function loadLogs(page = 1, filters = {}) {
 
     try {
         const resp = await fetch(`/api/admin/logs?${params}`);
+
+        // 检查响应状态码
+        if (!resp.ok) {
+            if (resp.status === 401) {
+                // 未登录，跳转到登录页面
+                document.getElementById('loginPage').classList.remove('hidden');
+                document.getElementById('adminPage').classList.add('hidden');
+                showToast('请先登录', 'error');
+                return { logs: [], total: 0, page: 1, page_size: 50 };
+            }
+            showToast('加载记录失败', 'error');
+            return { logs: [], total: 0, page: 1, page_size: 50 };
+        }
+
         const data = await resp.json();
 
         allLogs = data.logs || [];

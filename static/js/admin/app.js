@@ -198,12 +198,11 @@ export async function init() {
     }
 
     // 初始化登录表单
-    initLoginForm((firstLogin) => {
-        if (firstLogin) {
-            showAdmin();
-        } else {
-            showAdmin();
-        }
+    initLoginForm(async (firstLogin) => {
+        // 登录成功后，获取 CSRF token
+        await fetchCsrfToken();
+        // 显示管理后台
+        showAdmin();
     });
 
     // 初始化登出按钮
