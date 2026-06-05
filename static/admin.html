@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理后台 - LiteQSL-Web</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/css/tailwind.js"></script>
     <style>
         /* 表格响应式样式 */
         .overflow-x-auto {
@@ -330,6 +330,33 @@
                 <div id="backupListContainer">
                     <p class="text-gray-500 text-sm">加载中...</p>
                 </div>
+            </section>
+
+            <!-- 系统设置 -->
+            <section class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">系统设置</h2>
+                <form id="settingsForm" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">操作员呼号</label>
+                            <input type="text" id="settingCallsign" placeholder="如 BH7GUL"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <p class="text-xs text-gray-400 mt-1">设置后将自动替换访客界面显示的呼号</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">站点名称</label>
+                            <input type="text" id="settingStationName" placeholder="如 QSL & Log Management"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <p class="text-xs text-gray-400 mt-1">显示在访客界面标题中的站点名称</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="submit"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition min-h-[44px]">
+                            保存设置
+                        </button>
+                    </div>
+                </form>
             </section>
 
             <!-- Logs Table -->
@@ -1126,6 +1153,7 @@
             loadLogs();
             checkFirstLogin();
             loadBackups();
+            loadSettings();
         }
 
         // ===== 首次登录处理 =====
@@ -1762,6 +1790,53 @@
                 }
             }).catch(() => showToast('恢复请求失败', 'error'));
         }
+
+        // ===== 系统设置 =====
+        function loadSettings() {
+            fetch('/api/admin/settings').then(r => r.json()).then(data => {
+                if (data.settings) {
+                    document.getElementById('settingCallsign').value = data.settings.callsign || '';
+                    document.getElementById('settingStationName').value = data.settings.station_name || '';
+                }
+            }).catch(err => {
+                console.error('Failed to load settings:', err);
+            });
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const callsign = document.getElementById('settingCallsign').value.trim();
+            const stationName = document.getElementById('settingStationName').value.trim();
+
+            if (!callsign) {
+                showToast('请输入操作员呼号', 'error');
+                return;
+            }
+
+            const btn = this.querySelector('button[type="submit"]');
+            setLoading(btn, true);
+
+            fetch('/api/admin/settings', {
+                method: 'PUT',
+                headers: csrfHeaders({'Content-Type': 'application/json'}),
+                body: JSON.stringify({
+                    callsign: callsign,
+                    station_name: stationName || 'QSL & Log Management'
+                })
+            }).then(r => r.json()).then(data => {
+                setLoading(btn, false);
+                if (data.ok) {
+                    showToast('设置已保存', 'success');
+                    // 更新页面标题
+                    document.title = `管理后台 - ${callsign} ${stationName || 'QSL & Log Management'}`;
+                } else {
+                    showToast(data.detail || '保存失败', 'error');
+                }
+            }).catch(() => {
+                setLoading(btn, false);
+                showToast('请求失败', 'error');
+            });
+        });
 
         // ===== 时钟 =====
         function updateClocks() {

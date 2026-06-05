@@ -1,7 +1,19 @@
 from fastapi import APIRouter, Query
-from app.database import get_recent_logs_paginated, search_logs_by_call_paginated
+from app.database import get_recent_logs_paginated, search_logs_by_call_paginated, get_setting
 
 router = APIRouter(prefix="/api", tags=["public"])
+
+
+@router.get("/station-info")
+def station_info():
+    """获取电台公开信息（呼号、站点名称）"""
+    callsign = get_setting("callsign") or "BH7GUL"
+    station_name = get_setting("station_name") or "QSL & Log Management"
+    return {
+        "callsign": callsign,
+        "station_name": station_name,
+        "title": f"{callsign} {station_name}",
+    }
 
 
 @router.get("/recent")

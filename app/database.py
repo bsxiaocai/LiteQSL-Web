@@ -156,8 +156,18 @@ def init_db():
         except Exception:
             pass
 
+        # ===== 系统设置表 =====
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         conn.commit()
     seed_admin_user()
+    seed_default_settings()
 
 
 def seed_admin_user():
@@ -172,6 +182,49 @@ def seed_admin_user():
             )
         conn.execute("UPDATE users SET first_login = 1 WHERE first_login IS NULL")
         conn.commit()
+
+
+def seed_default_settings():
+    """初始化默认系统设置"""
+    default_settings = {
+        "callsign": "BH7GUL",
+        "station_name": "QSL & Log Management",
+    }
+    with get_db() as conn:
+        for key, value in default_settings.items():
+            conn.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+        conn.commit()
+
+
+def get_setting(key: str) -> str | None:
+    """获取单个设置值"""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+
+def get_all_settings() -> dict:
+    """获取所有设置"""
+    with get_db() as conn:
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        return {row["key"]: row["value"] for row in rows}
+
+
+def update_setting(key: str, value: str) -> bool:
+    """更新设置值"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP",
+            (key, value, value),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def get_user(username: str) -> dict | None:

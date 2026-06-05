@@ -460,3 +460,35 @@ async def restore_database(request: Request):
     # 恢复后清除 session，强制重新登录（恢复的数据库可能有不同的用户/密码）
     request.session.clear()
     return result
+
+
+# ===== 系统设置 =====
+
+@router.get("/settings")
+def get_settings(request: Request):
+    """获取所有系统设置"""
+    require_admin(request)
+    from app.database import get_all_settings
+    return {"settings": get_all_settings()}
+
+
+@router.put("/settings")
+async def update_settings(request: Request):
+    """更新系统设置"""
+    require_admin(request)
+    validate_csrf_token(request)
+    body = await request.json()
+    from app.database import update_setting
+
+    # 允许更新的设置项
+    allowed_keys = {"callsign", "station_name"}
+    updated = []
+    for key, value in body.items():
+        if key in allowed_keys:
+            if not isinstance(value, str):
+                raise HTTPException(status_code=400, detail=f"设置项 {key} 必须是字符串")
+            value = value.strip().upper() if key == "callsign" else value.strip()
+            update_setting(key, value)
+            updated.append(key)
+
+    return {"ok": True, "updated": updated}
