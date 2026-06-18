@@ -48,6 +48,16 @@ def parse_adif(content: str) -> list[dict]:
                 record["qsl_status"] = value
             elif tag_lower == "comment" or tag_lower == "notes":
                 record["comment"] = value
+            elif tag_lower == "gridsquare":
+                record["gridsquare"] = value
+            elif tag_lower == "name":
+                record["name"] = value
+            elif tag_lower == "country":
+                record["country"] = value
+            elif tag_lower == "operator":
+                record["operator"] = value
+            elif tag_lower == "my_callsign" or tag_lower == "station_callsign":
+                record["my_callsign"] = value
             # ===== 频率字段 =====
             elif tag_lower == "freq":
                 # ADIF FREQ 单位是 kHz（如 "14270"），转换为 MHz（如 "14.270"）
@@ -138,6 +148,7 @@ def export_adif(records: list[dict]) -> str:
     lines = []
     lines.append("ADIF Export from LiteQSL-Web")
     lines.append(f"Generated: {datetime.now().strftime('%Y%m%d %H%M%S')}")
+    lines.append("<PROGRAMVERSION:5>1.2.0")
     lines.append("<EOH>")
     lines.append("")
 
@@ -159,6 +170,11 @@ def export_adif(records: list[dict]) -> str:
         _append_adif_field(parts, "RST_RCVD", rec.get("rst_rcvd", ""))
         _append_adif_field(parts, "QSL_STATUS", rec.get("qsl_status", ""))
         _append_adif_field(parts, "COMMENT", rec.get("comment", ""))
+        _append_adif_field(parts, "GRIDSQUARE", rec.get("gridsquare", ""))
+        _append_adif_field(parts, "NAME", rec.get("name", ""))
+        _append_adif_field(parts, "COUNTRY", rec.get("country", ""))
+        _append_adif_field(parts, "OPERATOR", rec.get("operator", ""))
+        _append_adif_field(parts, "MY_CALLSIGN", rec.get("my_callsign", ""))
 
         # ===== 频率字段（MHz → kHz 转换） =====
         freq_mhz = rec.get("freq", "")

@@ -3,7 +3,7 @@ import aiosqlite
 import os
 import csv
 import io
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from config import DATABASE_PATH
 
 QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
@@ -90,6 +90,16 @@ async def get_async_db():
     db = await aiosqlite.connect(DATABASE_PATH)
     db.row_factory = aiosqlite.Row
     return db
+
+
+@asynccontextmanager
+async def async_db():
+    """异步数据库连接上下文管理器，自动关闭连接"""
+    db = await get_async_db()
+    try:
+        yield db
+    finally:
+        await db.close()
 
 
 def init_db():
@@ -623,7 +633,7 @@ BAND_FREQ_MAP = {
 def export_csv(records: list[dict]) -> str:
     """将通联记录导出为 CSV 格式字符串（含 UTF-8 BOM）"""
     output = io.StringIO()
-    output.write("﻿")  # UTF-8 BOM
+    output.write("\ufeff")  # UTF-8 BOM
     writer = csv.writer(output)
     writer.writerow([
         "CALL", "DATE", "TIME", "BAND", "FREQ", "MODE",

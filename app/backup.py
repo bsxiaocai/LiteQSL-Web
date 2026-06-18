@@ -4,10 +4,23 @@ import sqlite3
 from datetime import datetime
 from config import DATABASE_PATH, BACKUP_DIR
 
+MAX_BACKUPS = 20
+
 
 def _ensure_backup_dir():
     """确保备份目录存在"""
     os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+def _cleanup_old_backups():
+    """当备份数量超过上限时，自动删除最旧的备份"""
+    backups = list_backups()
+    if len(backups) > MAX_BACKUPS:
+        for old in backups[MAX_BACKUPS:]:
+            try:
+                os.remove(os.path.join(BACKUP_DIR, old["filename"]))
+            except OSError:
+                pass
 
 
 def create_backup() -> dict:
@@ -21,6 +34,8 @@ def create_backup() -> dict:
     source.backup(dest)
     dest.close()
     source.close()
+
+    _cleanup_old_backups()
 
     return {
         "filename": filename,

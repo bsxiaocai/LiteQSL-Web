@@ -11,24 +11,28 @@ import os
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app.database import get_user, update_password, get_db
+from app.database import get_db
 from app.auth import hash_password
+
+
+def get_user_sync(username: str) -> dict | None:
+    """同步获取用户（仅用于脚本）"""
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        return dict(row) if row else None
 
 
 def reset_password(username: str = "admin", new_password: str = "Admin123!"):
     """重置指定用户的密码"""
     print(f"Resetting password for user '{username}'...")
 
-    # 检查用户是否存在
-    user = get_user(username)
+    user = get_user_sync(username)
     if not user:
         print(f"[ERROR] User '{username}' not found")
         return False
 
-    # 生成新密码的 bcrypt 哈希
     new_hash = hash_password(new_password)
 
-    # 更新密码
     with get_db() as conn:
         conn.execute(
             "UPDATE users SET password_hash = ?, password_version = COALESCE(password_version, 1) + 1 WHERE username = ?",
@@ -36,8 +40,7 @@ def reset_password(username: str = "admin", new_password: str = "Admin123!"):
         )
         conn.commit()
 
-    # 验证更新成功
-    user = get_user(username)
+    user = get_user_sync(username)
     if user:
         print(f"[OK] Password reset successfully!")
         print(f"  Username: {username}")
@@ -74,7 +77,6 @@ def list_users():
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        # 默认重置 admin 密码
         reset_password()
         reset_first_login()
     elif len(sys.argv) == 2:

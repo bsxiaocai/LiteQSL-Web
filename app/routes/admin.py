@@ -638,33 +638,27 @@ async def batch_export(request: Request):
 async def stats_summary(request: Request):
     """获取统计数据概览"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
-        # 总通联数
+    async with async_db() as db:
         async with db.execute("SELECT COUNT(*) as cnt FROM logs") as cursor:
             row = await cursor.fetchone()
             total_logs = row["cnt"]
 
-        # 唯一呼号数
         async with db.execute("SELECT COUNT(DISTINCT call) as cnt FROM logs") as cursor:
             row = await cursor.fetchone()
             total_callsigns = row["cnt"]
 
-        # 本月通联数
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of month')"
         ) as cursor:
             row = await cursor.fetchone()
             this_month = row["cnt"]
 
-        # 本年通联数
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of year')"
         ) as cursor:
             row = await cursor.fetchone()
             this_year = row["cnt"]
 
-        # 待确认 QSL
         async with db.execute(
             "SELECT COUNT(*) as cnt FROM logs WHERE qsl_status = '未发送'"
         ) as cursor:
@@ -678,8 +672,6 @@ async def stats_summary(request: Request):
             "this_year": this_year,
             "qsl_pending": qsl_pending,
         }
-    finally:
-        await db.close()
 
 
 @router.get("/stats/by-band")
@@ -733,10 +725,12 @@ async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60))
     await require_admin(request)
     db = await get_async_db()
     try:
+        months_modifier = f"-{int(months)} months"
         async with db.execute(
-            f"SELECT substr(qso_date, 1, 7) as month, COUNT(*) as count "
-            f"FROM logs WHERE qso_date >= date('now', '-{months} months') "
-            f"GROUP BY month ORDER BY month"
+            "SELECT substr(qso_date, 1, 7) as month, COUNT(*) as count "
+            "FROM logs WHERE qso_date >= date('now', ?) "
+            "GROUP BY month ORDER BY month",
+            (months_modifier,)
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"month": row["month"], "count": row["count"]} for row in rows]
