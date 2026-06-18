@@ -1,6 +1,8 @@
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import Response, FileResponse
+from pydantic import BaseModel, Field
+from typing import Optional
 from app.auth import (
     check_admin, require_admin, verify_password, hash_password,
     validate_password_strength, generate_csrf_token, validate_csrf_token,
@@ -37,6 +39,68 @@ from app.backup import create_backup, list_backups, get_backup_path, delete_back
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+# ===== Pydantic 请求模型 =====
+
+class LoginBody(BaseModel):
+    username: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+class ChangePasswordBody(BaseModel):
+    old_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=1)
+
+class FirstLoginBody(BaseModel):
+    old_password: str = Field(..., min_length=1)
+    new_username: str = Field(..., min_length=5)
+    new_password: str = Field(..., min_length=8)
+    confirm_username: str = Field(..., min_length=1)
+    confirm_password: str = Field(..., min_length=1)
+
+class QSOBody(BaseModel):
+    call: str = Field(..., min_length=1)
+    qso_date: str = Field(default="")
+    time_on: str = Field(default="")
+    band: str = Field(default="")
+    mode: str = Field(default="")
+    rst_sent: str = Field(default="")
+    rst_rcvd: str = Field(default="")
+    qsl_status: str = Field(default="未发送")
+    comment: str = Field(default="")
+    qso_type: str = Field(default="NORMAL")
+    freq: str = Field(default="")
+    tx_freq: str = Field(default="")
+    rx_freq: str = Field(default="")
+    sat_name: str = Field(default="")
+    is_sk: int = Field(default=0)
+    qth: str = Field(default="")
+    force: bool = Field(default=False)
+
+class StatusBody(BaseModel):
+    qsl_status: str = Field(...)
+
+class BatchIdsBody(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+
+class BatchStatusBody(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+    status: str = Field(...)
+
+class BatchSKBody(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+    is_sk: int = Field(...)
+
+class BatchExportBody(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+    format: str = Field(default="adif")
+
+class RestoreBody(BaseModel):
+    filename: str = Field(..., min_length=1)
+
+class SettingsBody(BaseModel):
+    callsign: Optional[str] = None
+    station_name: Optional[str] = None
+
+
 @router.get("/csrf-token")
 async def get_csrf_token(request: Request):
     """获取 CSRF Token（需先登录，首次登录期间也可用）"""
@@ -46,7 +110,7 @@ async def get_csrf_token(request: Request):
 
 
 @router.post("/login")
-async def login(request: Request):
+async def login(request: Request, body: LoginBody):
     # 登录频率限制
     ip = get_client_ip(request)
     allowed, retry_after = check_rate_limit(ip)
@@ -57,11 +121,8 @@ async def login(request: Request):
             headers={"Retry-After": str(retry_after)},
         )
 
-    body = await request.json()
-    username = body.get("username", "")
-    password = body.get("password", "")
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="请输入用户名和密码")
+    username = body.username
+    password = body.password
 
     user = await get_user(username)
     if not user:
@@ -99,14 +160,11 @@ async def check_login(request: Request):
 
 
 @router.post("/change-password")
-async def change_password(request: Request):
+async def change_password(request: Request, body: ChangePasswordBody):
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    old_password = body.get("old_password", "")
-    new_password = body.get("new_password", "")
-    if not old_password or not new_password:
-        raise HTTPException(status_code=400, detail="请输入旧密码和新密码")
+    old_password = body.old_password
+    new_password = body.new_password
     username = request.session["username"]
     user = await get_user(username)
     is_valid, _ = verify_password(old_password, user["password_hash"])
@@ -130,15 +188,14 @@ async def first_login_status(request: Request):
 
 
 @router.post("/complete-first-login")
-async def complete_first_login_endpoint(request: Request):
+async def complete_first_login_endpoint(request: Request, body: FirstLoginBody):
     await require_admin(request, allow_first_login=True)
     validate_csrf_token(request)
-    body = await request.json()
-    old_password = body.get("old_password", "")
-    new_username = body.get("new_username", "").strip()
-    new_password = body.get("new_password", "")
-    confirm_username = body.get("confirm_username", "").strip()
-    confirm_password = body.get("confirm_password", "")
+    old_password = body.old_password
+    new_username = body.new_username.strip()
+    new_password = body.new_password
+    confirm_username = body.confirm_username.strip()
+    confirm_password = body.confirm_password
 
     username = request.session["username"]
     user = await get_user(username)
@@ -191,81 +248,74 @@ def get_qso_types():
 
 
 @router.post("/logs")
-async def add_log(request: Request):
+async def add_log(request: Request, data: QSOBody):
     await require_admin(request)
     validate_csrf_token(request)
-    data = await request.json()
 
     # 设置默认 qso_type
-    if not data.get("qso_type"):
-        data["qso_type"] = "NORMAL"
+    if not data.qso_type:
+        data.qso_type = "NORMAL"
 
-    qso_type = data.get("qso_type", "NORMAL")
+    qso_type = data.qso_type or "NORMAL"
 
     # 根据 QSO 类型设置不同的必填字段
     if qso_type == "EYEBALL":
-        # Eyeball 通联：只需要呼号、日期、卡片状态（不需要时间、频率、模式、RST）
         required_fields = ["call", "qso_date", "qsl_status"]
     elif qso_type == "SAT":
-        # 卫星通联：需要呼号、日期、时间、卫星名称、上行/下行频率、模式、RST
         required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
     elif qso_type == "REP":
-        # 中继通联：需要呼号、日期、时间、上行/下行频率、模式、RST
         required_fields = ["call", "qso_date", "time_on", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
     else:
-        # 标准通联：需要所有字段
         required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
+    data_dict = data.model_dump()
     for field in required_fields:
-        if not data.get(field):
+        if not data_dict.get(field):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
 
     # 自动推导 band（如果只有 freq 没有 band）
-    if data.get("freq") and not data.get("band"):
-        auto_band = freq_to_band(data["freq"])
+    if data.freq and not data.band:
+        auto_band = freq_to_band(data.freq)
         if auto_band:
-            data["band"] = auto_band
+            data.band = auto_band
 
     # 重复检测（force=true 时跳过）
-    if not data.get("force"):
+    if not data.force:
         if qso_type == "EYEBALL":
-            existing = await check_duplicate_eyeball(data["call"], data["qso_date"])
+            existing = await check_duplicate_eyeball(data.call, data.qso_date)
             if existing:
                 raise HTTPException(
                     status_code=409,
-                    detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} 的 Eyeball QSO 记录 (ID: {existing['id']})",
+                    detail=f"重复记录：已存在呼号 {data.call} 在 {data.qso_date} 的 Eyeball QSO 记录 (ID: {existing['id']})",
                 )
         else:
-            # 其他类型：按五字段检测重复（band 为空时用 freq 兜底）
-            band_for_check = data.get("band", "")
-            if not band_for_check and data.get("freq"):
-                band_for_check = freq_to_band(data["freq"])
+            band_for_check = data.band
+            if not band_for_check and data.freq:
+                band_for_check = freq_to_band(data.freq)
             if band_for_check:
-                existing = await check_duplicate(data["call"], data["qso_date"], data["time_on"], band_for_check, data.get("mode", ""))
+                existing = await check_duplicate(data.call, data.qso_date, data.time_on, band_for_check, data.mode)
                 if existing:
                     raise HTTPException(
                         status_code=409,
-                        detail=f"重复记录：已存在呼号 {data['call']} 在 {data['qso_date']} {data['time_on']} {band_for_check} {data.get('mode', '')} 的记录 (ID: {existing['id']})",
+                        detail=f"重复记录：已存在呼号 {data.call} 在 {data.qso_date} {data.time_on} {band_for_check} {data.mode} 的记录 (ID: {existing['id']})",
                     )
-    log_id = await insert_log(data)
+    log_id = await insert_log(data_dict)
     return {"ok": True, "id": log_id}
 
 
 @router.put("/logs/{log_id}")
-async def edit_log(log_id: int, request: Request):
+async def edit_log(log_id: int, request: Request, data: QSOBody):
     await require_admin(request)
     validate_csrf_token(request)
-    data = await request.json()
 
     # 校验必填字段
-    if not data.get("call"):
+    if not data.call:
         raise HTTPException(status_code=400, detail="呼号不能为空")
-    if not data.get("qso_date"):
+    if not data.qso_date:
         raise HTTPException(status_code=400, detail="日期不能为空")
 
-    qso_type = data.get("qso_type", "NORMAL")
+    qso_type = data.qso_type or "NORMAL"
     if qso_type == "EYEBALL":
-        # Eyeball QSO 只需要呼号、日期、卡片状态
         required_fields = ["call", "qso_date", "qsl_status"]
     elif qso_type == "SAT":
         required_fields = ["call", "qso_date", "time_on", "sat_name", "tx_freq", "rx_freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
@@ -274,21 +324,21 @@ async def edit_log(log_id: int, request: Request):
     else:
         required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
+    data_dict = data.model_dump()
     for field in required_fields:
-        if not data.get(field):
+        if not data_dict.get(field):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
 
-    if not await update_log(log_id, data):
+    if not await update_log(log_id, data_dict):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
 
 
 @router.put("/logs/{log_id}/status")
-async def change_status(log_id: int, request: Request):
+async def change_status(log_id: int, request: Request, body: StatusBody):
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    status = body.get("qsl_status", "")
+    status = body.qsl_status
     if status not in QSL_STATUSES:
         raise HTTPException(status_code=400, detail="无效的卡片状态")
     if not await update_qsl_status(log_id, status):
@@ -494,13 +544,10 @@ async def remove_backup(filename: str, request: Request):
 
 
 @router.post("/restore")
-async def restore_database(request: Request):
+async def restore_database(request: Request, body: RestoreBody):
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    filename = body.get("filename", "")
-    if not filename:
-        raise HTTPException(status_code=400, detail="请指定备份文件名")
+    filename = body.filename
     result = restore_backup(filename)
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["detail"])
@@ -520,18 +567,16 @@ async def get_settings(request: Request):
 
 
 @router.put("/settings")
-async def update_settings(request: Request):
+async def update_settings(request: Request, body: SettingsBody):
     """更新系统设置"""
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
     from app.database import update_setting
 
     # 允许更新的设置项
-    allowed_keys = {"callsign", "station_name"}
     updated = []
-    for key, value in body.items():
-        if key in allowed_keys:
+    for key, value in body.model_dump(exclude_none=True).items():
+        if key in ("callsign", "station_name"):
             if not isinstance(value, str):
                 raise HTTPException(status_code=400, detail=f"设置项 {key} 必须是字符串")
             value = value.strip().upper() if key == "callsign" else value.strip()
@@ -544,77 +589,54 @@ async def update_settings(request: Request):
 # ===== 批量操作 =====
 
 @router.post("/logs/batch-delete")
-async def batch_delete_logs(request: Request):
+async def batch_delete_logs(request: Request, body: BatchIdsBody):
     """批量删除记录"""
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    ids = body.get("ids", [])
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要删除的记录")
-    if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
-        raise HTTPException(status_code=400, detail="无效的记录 ID")
     try:
-        deleted = await delete_logs_batch(ids)
+        deleted = await delete_logs_batch(body.ids)
         return {"ok": True, "deleted": deleted}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/logs/batch-status")
-async def batch_update_status(request: Request):
+async def batch_update_status(request: Request, body: BatchStatusBody):
     """批量修改 QSL 状态"""
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    ids = body.get("ids", [])
-    status = body.get("status", "")
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要修改的记录")
-    if not status:
-        raise HTTPException(status_code=400, detail="请选择目标状态")
     try:
-        updated = await update_logs_status_batch(ids, status)
+        updated = await update_logs_status_batch(body.ids, body.status)
         return {"ok": True, "updated": updated}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/logs/batch-sk")
-async def batch_update_sk(request: Request):
+async def batch_update_sk(request: Request, body: BatchSKBody):
     """批量修改 SK 标记"""
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    ids = body.get("ids", [])
-    is_sk = body.get("is_sk")
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要修改的记录")
-    if is_sk not in (0, 1):
+    if body.is_sk not in (0, 1):
         raise HTTPException(status_code=400, detail="无效的 SK 标记值")
     try:
-        updated = await update_logs_sk_batch(ids, is_sk)
+        updated = await update_logs_sk_batch(body.ids, body.is_sk)
         return {"ok": True, "updated": updated}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/logs/batch-export")
-async def batch_export(request: Request):
+async def batch_export(request: Request, body: BatchExportBody):
     """批量导出选中记录"""
     await require_admin(request)
     validate_csrf_token(request)
-    body = await request.json()
-    ids = body.get("ids", [])
-    format_type = body.get("format", "adif")
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要导出的记录")
-    if format_type not in ("adif", "csv"):
+    if body.format not in ("adif", "csv"):
         raise HTTPException(status_code=400, detail="不支持的导出格式")
-    records = await get_logs_by_ids(ids)
+    records = await get_logs_by_ids(body.ids)
     if not records:
         raise HTTPException(status_code=404, detail="未找到指定记录")
-    if format_type == "adif":
+    if body.format == "adif":
         content = export_adif(records)
         filename = f"qsl_export_{datetime.now().strftime('%Y%m%d')}.adi"
         return Response(

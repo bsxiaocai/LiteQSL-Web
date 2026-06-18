@@ -35,6 +35,7 @@ def create_backup() -> dict:
     dest.close()
     source.close()
 
+    # 自动清理超出上限的旧备份
     _cleanup_old_backups()
 
     return {
@@ -42,6 +43,16 @@ def create_backup() -> dict:
         "size": os.path.getsize(dest_path),
         "created_at": datetime.now().isoformat(),
     }
+
+
+def _cleanup_old_backups():
+    """当备份数量超过 MAX_BACKUPS 时，删除最旧的备份"""
+    backups = list_backups()
+    if len(backups) > MAX_BACKUPS:
+        for old in backups[MAX_BACKUPS:]:
+            old_path = os.path.join(BACKUP_DIR, old["filename"])
+            if os.path.isfile(old_path):
+                os.remove(old_path)
 
 
 def list_backups() -> list[dict]:

@@ -10,18 +10,18 @@ def parse_adif(content: str) -> list[dict]:
     - 标准字段：CALL, QSO_DATE, TIME_ON, BAND, MODE, RST_SENT, RST_RCVD, QSL_STATUS, COMMENT/NOTES
     - 频率字段：FREQ（主频率 MHz）, FREQ_RX（接收频率 MHz）
     - 卫星字段：TX_FREQ, RX_FREQ, SAT_NAME, PROP_MODE
+    - 扩展字段：GRIDSQUARE, NAME, COUNTRY, OPERATOR, MY_CALLSIGN/STATION_CALLSIGN
     """
     records = []
-    content_upper = content.upper()
 
-    # Split by <eor> or <EOR>
-    parts = re.split(r"<EOR>", content_upper)
+    # Split by <eor> or <EOR>（不区分大小写）
+    parts = re.split(r"<EOR>", content, flags=re.IGNORECASE)
 
     for part in parts:
         record = {}
-        # Find all <TAG:LENGTH>VALUE patterns
+        # Find all <TAG:LENGTH>VALUE patterns（不区分大小写）
         pattern = r"<(\w+):(\d+)[^>]*>([^<]*)"
-        matches = re.findall(pattern, part)
+        matches = re.findall(pattern, part, re.IGNORECASE)
 
         if not matches:
             continue
@@ -148,6 +148,7 @@ def export_adif(records: list[dict]) -> str:
     lines = []
     lines.append("ADIF Export from LiteQSL-Web")
     lines.append(f"Generated: {datetime.now().strftime('%Y%m%d %H%M%S')}")
+    lines.append("<PROGRAMID:11>LiteQSL-Web")
     lines.append("<PROGRAMVERSION:5>1.2.0")
     lines.append("<EOH>")
     lines.append("")
