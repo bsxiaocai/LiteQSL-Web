@@ -26,3 +26,6 @@ TRUST_PROXY = os.getenv("TRUST_PROXY", "false").lower() in ("true", "1", "yes")
 
 # 备份目录
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), "data", "backups")
+
+# 最大备份数量（超出时自动删除最旧的备份）
+MAX_BACKUPS = 20

@@ -678,53 +678,43 @@ async def stats_summary(request: Request):
 async def stats_by_band(request: Request):
     """按波段统计"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         async with db.execute(
             "SELECT band, COUNT(*) as count FROM logs WHERE band != '' GROUP BY band ORDER BY count DESC"
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"band": row["band"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
 
 @router.get("/stats/by-mode")
 async def stats_by_mode(request: Request):
     """按模式统计"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         async with db.execute(
             "SELECT mode, COUNT(*) as count FROM logs WHERE mode != '' GROUP BY mode ORDER BY count DESC"
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"mode": row["mode"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
 
 @router.get("/stats/by-type")
 async def stats_by_type(request: Request):
     """按 QSO 类型统计"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         async with db.execute(
             "SELECT qso_type, COUNT(*) as count FROM logs GROUP BY qso_type ORDER BY count DESC"
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"qso_type": row["qso_type"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
 
 @router.get("/stats/by-month")
 async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60)):
     """按月统计通联数量"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         months_modifier = f"-{int(months)} months"
         async with db.execute(
             "SELECT substr(qso_date, 1, 7) as month, COUNT(*) as count "
@@ -734,16 +724,13 @@ async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60))
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"month": row["month"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
 
 @router.get("/stats/by-hour")
 async def stats_by_hour(request: Request):
     """按小时统计通联分布"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         async with db.execute(
             "SELECT CAST(substr(time_on, 1, 2) AS INTEGER) as hour, COUNT(*) as count "
             "FROM logs WHERE time_on != '' AND length(time_on) >= 2 AND qso_type != 'EYEBALL' "
@@ -751,25 +738,17 @@ async def stats_by_hour(request: Request):
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"hour": row["hour"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
 
 @router.get("/stats/top-calls")
 async def stats_top_calls(request: Request, limit: int = Query(20, ge=1, le=100)):
     """Top 通联对象"""
     await require_admin(request)
-    db = await get_async_db()
-    try:
+    async with async_db() as db:
         async with db.execute(
             "SELECT call, COUNT(*) as count FROM logs GROUP BY call ORDER BY count DESC LIMIT ?",
             (limit,)
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"call": row["call"], "count": row["count"]} for row in rows]
-    finally:
-        await db.close()
 
-
-# ===== 获取异步数据库连接（供统计等使用）=====
-from app.database import get_async_db

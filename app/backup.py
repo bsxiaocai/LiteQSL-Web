@@ -2,7 +2,7 @@ import os
 import re
 import sqlite3
 from datetime import datetime
-from config import DATABASE_PATH, BACKUP_DIR
+from config import DATABASE_PATH, BACKUP_DIR, MAX_BACKUPS
 
 MAX_BACKUPS = 20
 
