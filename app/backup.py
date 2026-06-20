@@ -4,55 +4,10 @@ import sqlite3
 from datetime import datetime
 from config import DATABASE_PATH, BACKUP_DIR, MAX_BACKUPS
 
-MAX_BACKUPS = 20
-
 
 def _ensure_backup_dir():
     """确保备份目录存在"""
     os.makedirs(BACKUP_DIR, exist_ok=True)
-
-
-def _cleanup_old_backups():
-    """当备份数量超过上限时，自动删除最旧的备份"""
-    backups = list_backups()
-    if len(backups) > MAX_BACKUPS:
-        for old in backups[MAX_BACKUPS:]:
-            try:
-                os.remove(os.path.join(BACKUP_DIR, old["filename"]))
-            except OSError:
-                pass
-
-
-def create_backup() -> dict:
-    """使用 SQLite backup API 创建数据库备份"""
-    _ensure_backup_dir()
-    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-    dest_path = os.path.join(BACKUP_DIR, filename)
-
-    source = sqlite3.connect(DATABASE_PATH)
-    dest = sqlite3.connect(dest_path)
-    source.backup(dest)
-    dest.close()
-    source.close()
-
-    # 自动清理超出上限的旧备份
-    _cleanup_old_backups()
-
-    return {
-        "filename": filename,
-        "size": os.path.getsize(dest_path),
-        "created_at": datetime.now().isoformat(),
-    }
-
-
-def _cleanup_old_backups():
-    """当备份数量超过 MAX_BACKUPS 时，删除最旧的备份"""
-    backups = list_backups()
-    if len(backups) > MAX_BACKUPS:
-        for old in backups[MAX_BACKUPS:]:
-            old_path = os.path.join(BACKUP_DIR, old["filename"])
-            if os.path.isfile(old_path):
-                os.remove(old_path)
 
 
 def list_backups() -> list[dict]:
@@ -73,6 +28,37 @@ def list_backups() -> list[dict]:
         })
     backups.sort(key=lambda x: x["created_at"], reverse=True)
     return backups
+
+
+def _cleanup_old_backups():
+    """当备份数量超过 MAX_BACKUPS 时，删除最旧的备份"""
+    backups = list_backups()
+    if len(backups) > MAX_BACKUPS:
+        for old in backups[MAX_BACKUPS:]:
+            old_path = os.path.join(BACKUP_DIR, old["filename"])
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+
+
+def create_backup() -> dict:
+    """使用 SQLite backup API 创建数据库备份"""
+    _ensure_backup_dir()
+    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    dest_path = os.path.join(BACKUP_DIR, filename)
+
+    source = sqlite3.connect(DATABASE_PATH)
+    dest = sqlite3.connect(dest_path)
+    source.backup(dest)
+    dest.close()
+    source.close()
+
+    _cleanup_old_backups()
+
+    return {
+        "filename": filename,
+        "size": os.path.getsize(dest_path),
+        "created_at": datetime.now().isoformat(),
+    }
 
 
 def get_backup_path(filename: str) -> str | None:

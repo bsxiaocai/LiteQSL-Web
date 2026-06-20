@@ -32,6 +32,7 @@ from app.database import (
     update_logs_status_batch,
     update_logs_sk_batch,
     get_logs_by_ids,
+    async_db,
 )
 from app.adif_parser import parse_adif, export_adif
 from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
