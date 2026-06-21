@@ -25,6 +25,11 @@ async function loadSettings() {
             if (visitorTimezoneInput) {
                 visitorTimezoneInput.value = data.settings.visitor_timezone || 'Asia/Shanghai';
             }
+            window.dispatchEvent(new CustomEvent('table-timezone-changed', {
+                detail: {
+                    timezone: data.settings.visitor_timezone || 'Asia/Shanghai'
+                }
+            }));
         }
     } catch (err) {
         console.error('Failed to load settings:', err);
@@ -50,6 +55,9 @@ async function saveSettings(callsign, stationName, visitorTimezone) {
             showToast('设置已保存', 'success');
             // 更新页面标题
             document.title = `管理后台 - ${callsign} ${stationName || 'QSL & Log Management'}`;
+            window.dispatchEvent(new CustomEvent('table-timezone-changed', {
+                detail: { timezone: visitorTimezone }
+            }));
             return true;
         } else {
             showToast(data.detail || '保存失败', 'error');

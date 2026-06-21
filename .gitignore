@@ -30,6 +30,9 @@ data/
 # Claude Code
 .claude/
 
+# Local release notes and working documents
+local-docs/
+
 # OS
 .DS_Store
 Thumbs.db

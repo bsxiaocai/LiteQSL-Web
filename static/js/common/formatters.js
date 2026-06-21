@@ -38,6 +38,36 @@ export function formatTime(timeStr) {
     return `${timeStr.substring(0, 2)}:${timeStr.substring(2, 4)}`;
 }
 
+// 将数据库中的 UTC 日期时间转换为指定表格显示时区
+export function formatQsoDateTime(qsoDate, timeOn, timezone = 'UTC') {
+    if (!qsoDate || qsoDate.length < 8 || !timeOn || timeOn.length < 4) {
+        return {
+            date: formatDate(qsoDate),
+            time: formatTime(timeOn)
+        };
+    }
+
+    const year = Number(qsoDate.substring(0, 4));
+    const month = Number(qsoDate.substring(4, 6)) - 1;
+    const day = Number(qsoDate.substring(6, 8));
+    const hour = Number(timeOn.substring(0, 2));
+    const minute = Number(timeOn.substring(2, 4));
+    const offsetMs = timezone === 'Asia/Shanghai' ? 8 * 60 * 60 * 1000 : 0;
+    const value = new Date(Date.UTC(year, month, day, hour, minute) + offsetMs);
+
+    return {
+        date: [
+            value.getUTCFullYear(),
+            String(value.getUTCMonth() + 1).padStart(2, '0'),
+            String(value.getUTCDate()).padStart(2, '0')
+        ].join('-'),
+        time: [
+            String(value.getUTCHours()).padStart(2, '0'),
+            String(value.getUTCMinutes()).padStart(2, '0')
+        ].join(':')
+    };
+}
+
 // 格式化类型标签
 export function formatTypeBadge(qsoType, location) {
     const type = qsoType || 'NORMAL';

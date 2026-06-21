@@ -27,7 +27,7 @@ async function loadStationInfo() {
         document.title = `${stationCallsign} ${stationName}`;
         document.getElementById('stationTitle').textContent = `${stationCallsign} ${stationName}`;
         document.getElementById('searchInput').placeholder = `请输入呼号（如 ${stationCallsign}）`;
-        const timezoneLabel = visitorTimezone === 'UTC' ? 'UTC' : '北京时间';
+        const timezoneLabel = visitorTimezone === 'UTC' ? 'UTC' : 'BJT';
         document.querySelectorAll('.visitor-timezone-label').forEach(element => {
             element.textContent = `时间（${timezoneLabel}）`;
         });

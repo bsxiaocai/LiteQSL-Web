@@ -1,209 +1,228 @@
 # LiteQSL-Web
 
-个人业余无线电 QSL 通联日志与卡片收发管理系统。
+LiteQSL-Web 是一个面向个人业余无线电爱好者和小型集体台的轻量级 QSO 日志与 QSL 状态管理系统。
 
-现代化、简洁、具有无线电特色的在线日志展示系统，适用于个人或小集体台使用。
+项目提供公开查询页面和独立管理后台，支持普通、卫星、中继及 Eyeball QSO，能够完成手动录入、筛选、统计、ADIF 导入导出和数据库备份等日常工作。
 
-> **当前版本：v1.3.0** | [更新日志](doc/v1.3.0-changelog.md) | [短期改进计划](doc/short-term-plan.md)
+> 当前版本：**v1.3.0**
 
----
+## 项目特点
 
-## 功能特性
+- 使用 FastAPI、SQLite 和原生 JavaScript，部署简单、资源占用低。
+- 数据保存在本地 SQLite 数据库，不依赖外部数据库服务。
+- 数据库统一使用 UTC 保存通联时间，录入和展示可选择 BJT 或 UTC。
+- 面向 QSL 查询场景提供公开页面，无需访客注册。
+- 支持离线使用本地 Tailwind 资源。
+- 数据库结构升级由版本化迁移自动完成。
 
-### 核心功能
+## 功能
 
-- **公共查询页** — 其他友台可通过呼号查询通联历史与卡片收发状态
-- **最近通联列表** — 首页展示最新通联记录，支持分页与多维筛选
-- **手动录入** — 管理后台支持逐条录入 QSO 记录，频率自动识别波段
-- **记录编辑** — 后台支持编辑已有 QSO 的全部字段
-- **ADIF 导入/导出** — 支持标准 `.adi` / `.adif` 文件批量导入与导出
-- **CSV 导出** — 支持导出为 CSV 格式，兼容 Excel 打开（UTF-8 BOM）
-- **卡片状态管理** — 支持五种状态：无法考证、未发送、已发送、无需发送、电子确认
-- **重复通联检测** — 手动录入与 ADIF 导入时自动检测重复 QSO，支持强制导入
+### QSO 管理
 
-### QSO 类型系统
+- 手动新增、编辑和删除 QSO。
+- 支持批量删除、批量修改 QSL 状态、批量标记 SK 和批量导出。
+- 自动将呼号转换为大写。
+- 根据频率自动识别业余波段。
+- 手动录入和 ADIF 导入时进行重复记录检查。
+- 支持按呼号、波段、模式、QSL 状态、QSO 类型、日期范围和 SK 状态筛选。
+- 筛选条件和分页状态可同步到管理页面 URL。
 
-支持四种 QSO 类型，适配不同通联场景：
+### QSO 类型
 
-| 类型 | 标签 | 说明 | 频率显示 |
-|------|------|------|----------|
-| `NORMAL` | 一般通联 | HF/VHF/UHF 常规通联 | 单频率，如 `14.270 MHz` |
-| `SAT` | 🛰 卫星通联 | 支持上下行频率 + 卫星名称 | `145.850 ↑ / 436.795 ↓` |
-| `REP` | 📡 中继通联 | 支持输入输出频率 + 频差计算 | `439.600 (-5.0MHz)` |
-| `EYEBALL` | 👀 Eyeball QSO | 线下面对面交流，频率/模式可选 | 可为空 |
+| 类型 | 用途 | 主要字段 |
+|------|------|----------|
+| `NORMAL` | 常规 HF、VHF、UHF 通联 | 频率、波段、模式、RST |
+| `SAT` | 卫星通联 | 卫星名称、卫星模式、上下行频率、模式、RST |
+| `REP` | 中继通联 | 中继名称、收发频率、模式、RST |
+| `EYEBALL` | 线下见面交流 | 日期、地点、备注 |
 
-### 高级搜索与筛选
+### QSL 状态
 
-管理后台支持多条件组合筛选：
+系统当前支持以下状态：
 
-- 呼号（模糊搜索）
-- 波段、模式、卡片状态、QSO 类型（精确匹配）
-- 日期范围（起始日期 ~ 结束日期）
-- SK 状态（正常/SK）
+- 无法考证
+- 未发送
+- 已发送
+- 已收到
+- 无需发送
+- 电子确认
 
-导出功能（ADIF/CSV）同样支持筛选条件。
+ADIF 导入导出使用标准 `QSL_SENT`、`QSL_RCVD`、`EQSL_QSL_RCVD` 和 `LOTW_QSL_RCVD` 字段映射这些状态。
 
-### 后台管理
+### 时间与时区
 
-- **呼号配置** — 支持自定义操作员呼号和站点名称，自动替换访客界面显示
-- **双时区录入** — 可选择按北京时间或 UTC 录入，数据库统一保存 UTC
-- **访客显示时区** — 管理后台可选择访客表格统一显示北京时间或 UTC
-- **分页与筛选** — 支持多条件组合筛选，高效管理大量记录
-- **首次登录强制改密** — 默认管理员首次登录后必须修改用户名和密码
-- **密码修改** — 支持修改管理员密码，含实时强度校验
-- **数据库备份与恢复** — 支持一键备份、下载、删除、恢复数据库
-- **密码重置** — 提供 `reset_password.py` 脚本，支持在服务器端重置密码
+- 数据库中的 `qso_date` 和 `time_on` 统一表示 UTC。
+- 新增和编辑 QSO 时可以选择按北京时间或 UTC 录入。
+- 系统设置可以选择表格统一显示：
+  - `BJT`：北京时间，UTC+8
+  - `UTC`：协调世界时
+- 管理后台和访客页面使用同一显示设置。
+- 转换时会同步处理日期，包括跨日情况。
+- ADIF 中的 `QSO_DATE` 和 `TIME_ON` 按 UTC 导入导出。
 
-### 用户体验
+### 访客页面
 
-- **Toast 通知系统** — 操作成功/失败/警告的统一提示
-- **Loading 状态** — 表单提交时显示加载动画，防止重复点击
-- **前端实时校验** — 日期、时间、RST 等格式实时校验
-- **密码强度指示器** — 修改密码时实时显示强度
-- **移动端适配** — 响应式布局，小屏设备可用
+- 展示最近通联记录。
+- 支持按波段、模式和 QSO 类型筛选。
+- 支持按呼号、波段、模式和日期范围组合查询。
+- 展示 QSL 状态、SK 标记、频率和 QSO 类型。
+- 表头明确显示当前使用的 `BJT` 或 `UTC`。
 
-### 安全特性
+### 统计
 
-- **bcrypt 密码哈希** — 使用 bcrypt 算法（rounds=12）存储密码，自动升级旧 SHA-256 哈希
-- **CSRF 防护** — 所有状态修改请求需要验证 CSRF Token
-- **登录频率限制** — IP 级别防暴力破解，5 次失败后锁定 10 分钟
-- **SQL 注入防护** — 全部查询使用参数化占位符，LIKE 查询转义通配符
-- **XSS 防护** — 所有用户输入经过 HTML 转义
-- **路径穿越防护** — 备份文件名校验，防止目录遍历攻击
-- **反向代理兼容** — 正确处理 X-Forwarded-For / X-Real-IP 头
+管理后台提供：
 
----
+- QSO 总数和唯一呼号数。
+- 本月、本年 QSO 数量。
+- 待处理 QSL 数量。
+- 波段、模式和 QSO 类型分布。
+- 最近月份通联趋势。
+- 按小时通联分布。
+- 通联次数最多的呼号。
+
+### 导入与导出
+
+- 导入 `.adi` 和 `.adif` 文件。
+- 导入文件最大为 10 MB。
+- 支持 UTF-8、GBK、GB2312 和 Latin-1 编码。
+- 支持筛选结果或选中记录导出。
+- 支持 ADIF 和 CSV 格式。
+- CSV 使用 UTF-8 BOM，便于 Excel 直接打开。
+
+ADIF 频率字段 `FREQ` 和 `FREQ_RX` 使用标准 MHz 单位。卫星记录支持 `PROP_MODE=SAT`、`SAT_NAME` 和 `SAT_MODE`。
+
+### 数据库维护
+
+- 一键创建、下载、删除和恢复 SQLite 备份。
+- 恢复前自动创建安全备份。
+- 恢复前执行 SQLite 完整性检查。
+- 默认最多保留 20 个备份。
+- 应用启动时自动执行尚未应用的数据库迁移。
+
+### 账户与安全
+
+- bcrypt 密码哈希。
+- 首次登录强制修改默认用户名和密码。
+- 修改密码后旧 Session 自动失效。
+- CSRF Token 防护。
+- 登录失败频率限制。
+- 参数化 SQL 查询和 LIKE 通配符转义。
+- 前端输出转义。
+- 备份文件路径校验。
+- 可配置是否信任反向代理来源地址。
 
 ## 技术栈
 
-| 层级 | 技术 |
+| 部分 | 技术 |
 |------|------|
-| 后端 | Python 3.10+ / FastAPI / Uvicorn |
-| 数据库 | SQLite |
-| 前端 | 原生 HTML + JavaScript (ES Module) + Tailwind CSS (本地) |
-| 密码哈希 | bcrypt |
+| 后端 | Python 3.10+、FastAPI、Uvicorn |
+| 数据库 | SQLite、aiosqlite |
+| 前端 | HTML、原生 JavaScript ES Module、Tailwind CSS |
+| 图表 | Chart.js |
+| 认证 | Starlette Session、bcrypt |
+| 测试 | Python unittest、GitHub Actions |
 
----
+## 安装与启动
 
-## 快速开始
-
-### 1. 克隆项目
+### 1. 获取代码
 
 ```bash
 git clone https://github.com/bsxiaocai/LiteQSL-Web.git
 cd LiteQSL-Web
 ```
 
-### 2. 安装依赖
+### 2. 创建虚拟环境
+
+Linux / macOS：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Windows PowerShell：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 启动服务
+### 4. 启动
 
 ```bash
 python run.py
 ```
 
-服务默认监听 `http://localhost:8000`。
-
-### 4. 访问
+默认地址：
 
 | 页面 | 地址 |
 |------|------|
-| 公共查询页 | http://localhost:8000/ |
-| 后台管理页 | http://localhost:8000/admin |
+| 访客页面 | http://localhost:8000/ |
+| 管理后台 | http://localhost:8000/admin |
+| 健康检查 | http://localhost:8000/health |
+| OpenAPI 文档 | http://localhost:8000/docs |
 
-### 5. 默认管理员账号
+### 默认管理员
 
-| 字段 | 值 |
-|------|------|
+| 项目 | 默认值 |
+|------|--------|
 | 用户名 | `admin` |
 | 密码 | `Admin123!` |
 
-首次登录后系统将强制要求修改用户名和密码。
+首次登录后必须修改用户名和密码。请勿在公网环境中继续使用默认凭据。
 
-### 6. 停止服务
+## 系统设置
 
-在终端按 `Ctrl + C` 即可停止。
+登录管理后台后，可以配置：
 
----
+- 操作员呼号。
+- 站点名称。
+- 管理后台和访客表格使用 BJT 或 UTC 显示。
 
-## 密码管理
+设置保存在 SQLite 的 `settings` 表中。
 
-### 重置密码
+## 密码重置
 
-如果忘记管理员密码，可使用 `reset_password.py` 脚本重置：
+忘记密码时可以在服务器终端执行：
 
 ```bash
-# 重置 admin 密码为默认值 Admin123!
-python reset_password.py
-
-# 列出所有用户
+# 列出账户
 python reset_password.py --list
 
-# 重置指定用户的密码
+# 重置指定账户
 python reset_password.py 用户名 新密码
+
+# 将 admin 重置为默认密码
+python reset_password.py
 ```
 
----
+重置密码后，该账户已有 Session 将失效。
 
-## 服务端部署
+## 环境变量与配置
 
-### 环境变量
+| 配置 | 说明 | 默认值 |
+|------|------|--------|
+| `SECRET_KEY` | Session 签名密钥 | 未设置时生成并保存到 `data/.secret_key` |
+| `TRUST_PROXY` | 是否信任 `X-Forwarded-For` 和 `X-Real-IP` | `false` |
+| `LOGIN_MAX_ATTEMPTS` | 登录失败次数上限 | `5` |
+| `LOGIN_LOCKOUT_SECONDS` | 登录锁定秒数 | `600` |
+| `MAX_BACKUPS` | 自动保留的备份数量 | `20` |
 
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `SECRET_KEY` | Session 加密密钥，**生产环境必须修改** | 自动生成并保存到 `data/.secret_key` |
-| `TRUST_PROXY` | 是否信任反向代理头 | `false` |
+生产环境建议通过环境变量提供固定且随机的 `SECRET_KEY`。
 
-### 登录限流配置
+## 生产部署
 
-在 `config.py` 中可调整以下参数：
-
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `LOGIN_MAX_ATTEMPTS` | 最大失败尝试次数 | `5` |
-| `LOGIN_LOCKOUT_SECONDS` | 锁定时间（秒） | `600`（10 分钟） |
-
-### 使用 systemd 部署（推荐）
-
-以下步骤适用于 Debian / Ubuntu / CentOS 等主流 Linux 发行版。
-
-#### 1. 准备项目
-
-```bash
-# 克隆项目到服务器
-git clone https://github.com/bsxiaocai/LiteQSL-Web.git /opt/LiteQSL-Web
-cd /opt/LiteQSL-Web
-
-# 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 修改 SECRET_KEY（重要！）
-export SECRET_KEY="your-random-secret-key-here"
-
-# 首次启动测试
-python run.py
-# 确认能正常访问后 Ctrl+C 停止
-```
-
-#### 2. 创建 systemd 服务文件
-
-```bash
-sudo nano /etc/systemd/system/liteqsl.service
-```
-
-写入以下内容（根据实际路径修改）：
+以下示例使用 systemd 运行 Uvicorn：
 
 ```ini
 [Unit]
-Description=LiteQSL-Web Amateur Radio QSL Log System
+Description=LiteQSL-Web
 After=network.target
 
 [Service]
@@ -211,13 +230,11 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/opt/LiteQSL-Web
-Environment="PATH=/opt/LiteQSL-Web/venv/bin"
-Environment="SECRET_KEY=your-random-secret-key-here"
-ExecStart=/opt/LiteQSL-Web/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Environment="PATH=/opt/LiteQSL-Web/.venv/bin"
+Environment="SECRET_KEY=请替换为随机密钥"
+ExecStart=/opt/LiteQSL-Web/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
-
-# 安全加固
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/LiteQSL-Web/data
@@ -227,23 +244,12 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-#### 3. 启动服务
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl start liteqsl
-sudo systemctl enable liteqsl
-sudo systemctl status liteqsl
-```
-
-#### 4. 配置 Nginx 反向代理（可选）
+Nginx 反向代理示例：
 
 ```nginx
 server {
     listen 80;
     server_name qsl.example.com;
-
-    # 限制上传文件大小（ADIF 导入）
     client_max_body_size 10M;
 
     location / {
@@ -256,231 +262,130 @@ server {
 }
 ```
 
-如需 HTTPS，推荐使用 Certbot 自动配置 Let's Encrypt 证书：
+启用反向代理来源地址解析时，需要设置：
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d qsl.example.com
+export TRUST_PROXY=true
 ```
 
----
+公网部署应同时启用 HTTPS。
+
+## 升级
+
+升级前请先在管理后台下载数据库备份，然后更新代码并重启服务：
+
+```bash
+git pull
+pip install -r requirements.txt
+sudo systemctl restart liteqsl
+```
+
+应用启动时会自动执行数据库迁移。v1.3.0 首次启动会将旧版记录按原有北京时间语义转换为 UTC，因此迁移后不建议直接降级到旧版本。
+
+## 数据存储
+
+默认数据目录：
+
+```text
+data/
+├── qsl.db
+├── .secret_key
+└── backups/
+```
+
+`data/` 已被 Git 忽略。迁移服务器时需要单独复制数据库、备份和密钥文件。
+
+主要数据表：
+
+| 表 | 用途 |
+|----|------|
+| `logs` | QSO 与 QSL 状态 |
+| `users` | 管理账户 |
+| `settings` | 系统设置 |
+| `schema_version` | 已执行的数据库迁移版本 |
+
+`logs` 表中的主要字段包括呼号、UTC 日期时间、频率、波段、模式、QSO 类型、卫星信息、RST、QSL 状态、SK 标记、地点和备注。
+
+## API
+
+### 公开接口
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| GET | `/api/station-info` | 站点信息和表格显示时区 |
+| GET | `/api/recent` | 最近 QSO |
+| GET | `/api/search` | 组合查询 QSO |
+| GET | `/api/bands` | 已使用波段 |
+| GET | `/api/modes` | 已使用模式 |
+
+### 管理接口
+
+管理接口位于 `/api/admin`，包含：
+
+- 登录、登出、密码和 CSRF Token。
+- QSO 增删改查及批量操作。
+- ADIF、CSV 导入导出。
+- 系统设置。
+- 数据统计。
+- 数据库备份与恢复。
+
+完整请求参数和响应结构可在应用启动后查看 `/docs`。
+
+## 测试
+
+运行测试：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+运行 Python 编译检查：
+
+```bash
+python -m compileall -q app tests reset_password.py
+```
+
+仓库中的 GitHub Actions 会在 push 和 pull request 时自动运行测试。
 
 ## 项目结构
 
-```
+```text
 LiteQSL-Web/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py              # FastAPI 入口
-│   ├── database.py           # SQLite 数据库层（含迁移逻辑）
-│   ├── adif_parser.py        # ADIF 解析与导出
-│   ├── auth.py               # bcrypt 密码哈希与认证
-│   ├── rate_limit.py         # 登录频率限制
-│   ├── backup.py             # 数据库备份与恢复
-│   └── routes/
-│       ├── __init__.py
-│       ├── public.py         # 公开 API（查询、分页）
-│       └── admin.py          # 管理 API（CRUD、导入导出、备份、设置）
+│   ├── routes/              # 公开与管理 API
+│   ├── adif_parser.py       # ADIF 解析和导出
+│   ├── auth.py              # 登录、Session 和 CSRF
+│   ├── backup.py            # SQLite 备份和恢复
+│   ├── database.py          # 数据访问和数据库迁移
+│   ├── main.py              # FastAPI 应用入口
+│   ├── rate_limit.py        # 登录限流
+│   ├── time_utils.py        # BJT/UTC 转换
+│   └── version.py           # 应用和 ADIF 版本
 ├── static/
-│   ├── index.html            # 公共查询页
-│   ├── admin.html            # 后台管理页
-│   ├── css/
-│   │   └── tailwind.js       # Tailwind CSS（本地）
-│   └── js/
-│       ├── common/           # 公共模块
-│       │   ├── utils.js      # 工具函数
-│       │   ├── constants.js  # 常量定义
-│       │   ├── formatters.js # 格式化函数
-│       │   ├── pagination.js # 分页组件
-│       │   ├── clock.js      # 时钟组件
-│       │   └── index.js      # 统一导出
-│       ├── public/
-│       │   └── app.js        # 公开页面主逻辑
-│       └── admin/
-│           ├── app.js        # 管理后台主入口
-│           ├── auth.js       # 登录认证
-│           ├── qso-form.js   # QSO 表单
-│           ├── qso-table.js  # 记录表格
-│           ├── edit-modal.js # 编辑弹窗
-│           ├── import-export.js # 导入导出
-│           ├── backup.js     # 备份管理
-│           └── settings.js   # 系统设置
-├── data/                     # SQLite 数据库（自动生成）
-│   └── backups/              # 数据库备份（自动生成）
-├── doc/
-│   ├── v1.0.0-changelog.md   # v1.0.0 更新日志
-│   ├── v1.1.0-changelog.md   # v1.1.0 更新日志
-│   ├── v1.2.0-changelog.md   # v1.2.0 更新日志
-│   └── short-term-plan.md    # 短期改进计划
-├── config.py                 # 配置文件
-├── requirements.txt          # Python 依赖
-├── reset_password.py         # 密码重置脚本
-└── run.py                    # 启动脚本
+│   ├── index.html           # 访客页面
+│   ├── admin.html           # 管理后台
+│   └── js/                  # 前端 ES Module
+├── tests/                   # 自动化测试
+├── data/                    # 本地数据，不提交到 Git
+├── config.py
+├── requirements.txt
+├── reset_password.py
+└── run.py
 ```
 
----
+本地发布说明和开发过程文档统一放在 `local-docs/`，该目录不会提交到 Git。
 
-## 数据库说明
+## 注意事项
 
-系统使用 SQLite，数据库文件位于 `data/qsl.db`，首次启动时自动创建。所有数据库结构变更通过自动迁移完成，无需手动操作。
-
-### 数据库字段
-
-#### 通联记录表（logs）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | INTEGER | 主键，自增 |
-| `call` | TEXT | 对方呼号 |
-| `qso_date` | TEXT | 通联日期（YYYYMMDD） |
-| `time_on` | TEXT | UTC 通联时间（HHMM） |
-| `freq` | TEXT | 主频率（MHz），如 `14.270` |
-| `band` | TEXT | 波段，由频率自动推导 |
-| `mode` | TEXT | 模式，如 SSB、CW、FT8 |
-| `qso_type` | TEXT | QSO 类型：NORMAL / SAT / REP / EYEBALL |
-| `tx_freq` | TEXT | 发射/上行频率（MHz） |
-| `rx_freq` | TEXT | 接收/下行频率（MHz） |
-| `sat_name` | TEXT | 卫星名称，如 SO-50 |
-| `rst_sent` | TEXT | 发送的 RST 信号报告 |
-| `rst_rcvd` | TEXT | 接收的 RST 信号报告 |
-| `qsl_status` | TEXT | 卡片状态 |
-| `is_sk` | INTEGER | Silent Key 标识（0=否，1=是） |
-| `qth` | TEXT | 地点（Eyeball QSO 用） |
-| `comment` | TEXT | 备注 |
-| `created_at` | TIMESTAMP | 记录创建时间 |
-
-#### 系统设置表（settings）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `key` | TEXT | 设置键名（主键） |
-| `value` | TEXT | 设置值 |
-| `updated_at` | TIMESTAMP | 更新时间 |
-
-#### 用户表（users）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | INTEGER | 主键，自增 |
-| `username` | TEXT | 用户名（唯一） |
-| `password_hash` | TEXT | 密码哈希 |
-| `first_login` | INTEGER | 首次登录标识（0=否，1=是） |
-| `password_version` | INTEGER | 密码版本（用于 session 失效） |
-| `created_at` | TIMESTAMP | 创建时间 |
-
-### 数据库索引
-
-为优化查询性能，系统自动在以下字段创建索引：
-
-- `logs.call` — 呼号
-- `logs.qso_date` — 通联日期
-- `logs.band` — 波段
-- `logs.mode` — 模式
-- `logs.qsl_status` — 卡片状态
-- `logs.qso_type` — QSO 类型
-
----
-
-## ADIF 兼容性
-
-### 导入支持的字段
-
-| ADIF 字段 | 内部字段 | 说明 |
-|-----------|---------|------|
-| `CALL` | call | 呼号 |
-| `QSO_DATE` | qso_date | 日期 |
-| `TIME_ON` | time_on | 时间 |
-| `BAND` | band | 波段 |
-| `MODE` | mode | 模式 |
-| `FREQ` | freq | 频率（自动 kHz → MHz 转换） |
-| `FREQ_RX` | rx_freq | 接收频率 |
-| `TX_FREQ` | tx_freq | 发射频率 |
-| `RX_FREQ` | rx_freq | 接收频率 |
-| `SAT_NAME` | sat_name | 卫星名称 |
-| `PROP_MODE` | — | 自动推导 qso_type（SAT/RPT） |
-| `RST_SENT` | rst_sent | 信号报告（发送） |
-| `RST_RCVD` | rst_rcvd | 信号报告（接收） |
-| `QSL_SENT` / `QSL_RCVD` | qsl_status | 标准纸质 QSL 状态 |
-| `EQSL_QSL_RCVD` / `LOTW_QSL_RCVD` | qsl_status | 电子确认状态 |
-| `COMMENT` / `NOTES` | comment | 备注 |
-
-### 导出行为
-
-- **普通 QSO**：导出 `FREQ`（MHz → kHz）+ `BAND`
-- **卫星 QSO**：导出 `PROP_MODE=SAT` + `SAT_NAME` + `TX_FREQ` + `RX_FREQ` + `FREQ_RX`
-- **中继 QSO**：导出 `TX_FREQ` + `RX_FREQ` + `FREQ_RX`
-- **Eyeball QSO**：不导出（无频率信息）
-
----
-
-## API 文档
-
-### 公开 API（无需登录）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/station-info` | 获取电台信息（呼号、站点名称） |
-| GET | `/api/recent` | 获取最近通联记录（支持分页和筛选） |
-| GET | `/api/search` | 按呼号搜索通联记录 |
-
-### 管理 API（需要登录）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/admin/login` | 登录 |
-| POST | `/api/admin/logout` | 登出 |
-| GET | `/api/admin/check` | 检查登录状态 |
-| GET | `/api/admin/csrf-token` | 获取 CSRF Token |
-| GET | `/api/admin/first-login-status` | 检查首次登录状态 |
-| POST | `/api/admin/complete-first-login` | 完成首次登录 |
-| POST | `/api/admin/change-password` | 修改密码 |
-| GET | `/api/admin/logs` | 获取通联记录（支持分页和高级筛选） |
-| POST | `/api/admin/logs` | 添加通联记录 |
-| PUT | `/api/admin/logs/{id}` | 更新通联记录 |
-| DELETE | `/api/admin/logs/{id}` | 删除通联记录 |
-| PUT | `/api/admin/logs/{id}/status` | 更新卡片状态 |
-| POST | `/api/admin/import-adif` | 导入 ADIF 文件 |
-| GET | `/api/admin/export-adif` | 导出 ADIF 文件 |
-| GET | `/api/admin/export-csv` | 导出 CSV 文件 |
-| GET | `/api/admin/settings` | 获取系统设置 |
-| PUT | `/api/admin/settings` | 更新系统设置 |
-| POST | `/api/admin/backup` | 创建备份 |
-| GET | `/api/admin/backups` | 获取备份列表 |
-| GET | `/api/admin/backups/{filename}` | 下载备份 |
-| DELETE | `/api/admin/backups/{filename}` | 删除备份 |
-| POST | `/api/admin/restore` | 恢复备份 |
-
----
-
-## 依赖说明
-
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| fastapi | 0.115.12 | Web 框架 |
-| uvicorn | 0.34.2 | ASGI 服务器 |
-| python-multipart | 0.0.20 | 文件上传支持 |
-| itsdangerous | 2.2.0 | Session 签名 |
-| bcrypt | >=4.0.0 | 密码哈希 |
-
----
-
-## 版本历史
-
-| 版本 | 日期 | 主要更新 |
-|------|------|---------|
-| v1.2.0 | 2026-06-05 | 前端模块化重构、高级搜索、自动日期时间、呼号配置 |
-| v1.3.0 | 2026-06-21 | ADIF 标准化、UTC 存储、时区显示设置、数据库迁移与测试 |
-| v1.1.0 | 2026-05-29 | QSO 类型系统、Eyeball QSO、首次登录改密 |
-| v1.0.0 | 2026-05-20 | 初始版本，核心功能发布 |
-
-详细更新日志请查看 [doc/](doc/) 目录。
-
----
-
-## 免责声明
-
-本系统仅供个人学习与业余无线电通联记录管理使用。使用者应遵守所在地区关于业余无线电的相关法律法规。作者不对因使用本系统而产生的任何直接或间接损失承担责任。
+- 本项目定位是个人和小型集体台使用，不包含复杂多用户权限系统。
+- 导入重要 ADIF 文件前建议先创建数据库备份。
+- 直接修改 SQLite 数据库可能绕过数据校验和时区转换。
+- 公开接口会返回日志数据，请根据部署场景判断是否适合公网开放。
 
 ## 开源协议
 
 本项目基于 [MIT License](LICENSE) 开源。
+
+## 免责声明
+
+本项目仅用于个人学习和业余无线电日志管理。使用者应遵守所在国家或地区关于业余无线电、隐私和数据发布的相关规定。作者不对因部署、配置或使用本项目产生的直接或间接损失承担责任。

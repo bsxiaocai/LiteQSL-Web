@@ -4,7 +4,7 @@
 
 import {
     escapeHtml, showToast, statusColor,
-    formatDate, formatTime, formatTypeBadge, formatFreqCell,
+    formatQsoDateTime, formatTypeBadge, formatFreqCell,
     renderPagination, QSL_STATUSES
 } from '../common/index.js';
 import { csrfHeaders } from './auth.js';
@@ -13,9 +13,41 @@ import { csrfHeaders } from './auth.js';
 let currentPage = 1;
 let currentFilters = {};
 let allLogs = [];
+let displayTimezone = 'Asia/Shanghai';
+let displayTimezoneLoaded = false;
+
+function timezoneAbbreviation() {
+    return displayTimezone === 'UTC' ? 'UTC' : 'BJT';
+}
+
+function updateTimezoneHeaders() {
+    const abbreviation = timezoneAbbreviation();
+    document.querySelectorAll('.admin-date-timezone-label').forEach(element => {
+        element.textContent = `日期（${abbreviation}）`;
+    });
+    document.querySelectorAll('.admin-time-timezone-label').forEach(element => {
+        element.textContent = `时间（${abbreviation}）`;
+    });
+}
+
+async function ensureDisplayTimezone() {
+    if (displayTimezoneLoaded) return;
+    try {
+        const response = await fetch('/api/admin/settings');
+        if (response.ok) {
+            const data = await response.json();
+            displayTimezone = data.settings?.visitor_timezone || 'Asia/Shanghai';
+        }
+    } catch (error) {
+        console.error('Failed to load table timezone:', error);
+    }
+    displayTimezoneLoaded = true;
+    updateTimezoneHeaders();
+}
 
 // 加载日志
 export async function loadLogs(page = 1, filters = {}) {
+    await ensureDisplayTimezone();
     currentPage = page;
     currentFilters = filters;
 
@@ -79,7 +111,8 @@ function renderLogsTable(data) {
             callHtml += ' <span class="px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-600 ml-1">SK</span>';
         }
 
-        const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : formatTime(log.time_on);
+        const dateTime = formatQsoDateTime(log.qso_date, log.time_on, displayTimezone);
+        const timeDisplay = log.qso_type === 'EYEBALL' ? '-' : dateTime.time;
         const rstDisplay = `${escapeHtml(log.rst_sent) || '-'}/${escapeHtml(log.rst_rcvd) || '-'}`;
 
         return `<tr class="border-b hover:bg-gray-50">
@@ -87,7 +120,7 @@ function renderLogsTable(data) {
                 <input type="checkbox" class="log-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" value="${log.id}" onchange="window.updateBatchToolbar()">
             </td>
             <td class="px-3 py-2 font-medium whitespace-nowrap">${callHtml}</td>
-            <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(formatDate(log.qso_date))}</td>
+            <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(dateTime.date)}</td>
             <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(timeDisplay)}</td>
             <td class="px-3 py-2 text-gray-600">${formatFreqCell(log)}</td>
             <td class="px-3 py-2 whitespace-nowrap">${escapeHtml(log.mode) || '-'}</td>
@@ -429,6 +462,13 @@ async function batchExport(format) {
 
 // 注册全局函数
 export function registerGlobalFunctions() {
+    window.addEventListener('table-timezone-changed', event => {
+        displayTimezone = event.detail?.timezone || 'Asia/Shanghai';
+        displayTimezoneLoaded = true;
+        updateTimezoneHeaders();
+        renderLogsTable({ logs: allLogs });
+    });
+
     window.goToPage = function(page) {
         loadLogs(page, currentFilters);
         syncFiltersToURL(currentFilters, page);
