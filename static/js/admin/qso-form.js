@@ -2,7 +2,7 @@
  * QSO 录入表单
  */
 
-import { showToast, setLoading, freqToBand, QSO_TYPE_LABELS } from '../common/index.js';
+import { showToast, setLoading, freqToBand } from '../common/index.js';
 import { csrfHeaders } from './auth.js';
 
 // QSO 类型切换逻辑
@@ -17,6 +17,7 @@ export function setupFormTypeToggle(formPrefix = 'add') {
     const repFields = document.getElementById(`${formPrefix}RepFields`);
     const eyeballFields = document.getElementById(`${formPrefix}EyeballFields`);
     const timeGroup = document.getElementById(`${formPrefix}TimeGroup`);
+    const timezoneGroup = document.getElementById(`${formPrefix}TimezoneGroup`);
 
     function toggleFields() {
         const type = typeSelect.value;
@@ -27,6 +28,7 @@ export function setupFormTypeToggle(formPrefix = 'add') {
         if (repFields) repFields.classList.toggle('hidden', type !== 'REP');
         if (eyeballFields) eyeballFields.classList.toggle('hidden', type !== 'EYEBALL');
         if (timeGroup) timeGroup.classList.toggle('hidden', type === 'EYEBALL');
+        if (timezoneGroup) timezoneGroup.classList.toggle('hidden', type === 'EYEBALL');
     }
 
     typeSelect.addEventListener('change', toggleFields);
@@ -58,46 +60,65 @@ export function setupCallUppercase() {
 }
 
 // 设置今天的日期
-export function setTodayDate(inputId) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-
-    const now = new Date();
-    const dateStr = now.getFullYear() + '-' +
-        String(now.getMonth() + 1).padStart(2, '0') + '-' +
-        String(now.getDate()).padStart(2, '0');
-    input.value = dateStr;
+function currentParts(timeZone) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(new Date());
+    return Object.fromEntries(parts.map(part => [part.type, part.value]));
 }
 
-// 设置当前北京时间
-export function setNowBeijing(inputId) {
+export function setTodayDate(inputId, timeZone = 'Asia/Shanghai') {
     const input = document.getElementById(inputId);
     if (!input) return;
 
-    const now = new Date();
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const beijing = new Date(utcMs + 8 * 3600000);
-    const timeStr = String(beijing.getHours()).padStart(2, '0') + ':' +
-        String(beijing.getMinutes()).padStart(2, '0');
-    input.value = timeStr;
+    const parts = currentParts(timeZone);
+    input.value = `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function setNowTime(inputId, timeZone = 'Asia/Shanghai') {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    const parts = currentParts(timeZone);
+    input.value = `${parts.hour}:${parts.minute}`;
+}
+
+function selectedAddTimezone() {
+    return document.getElementById('addInputTimezone')?.value || 'Asia/Shanghai';
+}
+
+function fillCurrentAddDateTime() {
+    const timeZone = selectedAddTimezone();
+    setTodayDate('addQsoDate', timeZone);
+    setNowTime('addTimeOn', timeZone);
 }
 
 // 自动填充日期时间
 export function setupAutoDateTime() {
     // 添加表单的日期时间
-    setTodayDate('addQsoDate');
-    setNowBeijing('addTimeOn');
+    fillCurrentAddDateTime();
 
     // 今天按钮
     const todayBtn = document.getElementById('addTodayBtn');
     if (todayBtn) {
-        todayBtn.addEventListener('click', () => setTodayDate('addQsoDate'));
+        todayBtn.addEventListener('click', () => setTodayDate('addQsoDate', selectedAddTimezone()));
     }
 
     // 现在按钮
     const nowBtn = document.getElementById('addNowBtn');
     if (nowBtn) {
-        nowBtn.addEventListener('click', () => setNowBeijing('addTimeOn'));
+        nowBtn.addEventListener('click', () => setNowTime('addTimeOn', selectedAddTimezone()));
+    }
+
+    const timezoneSelect = document.getElementById('addInputTimezone');
+    if (timezoneSelect) {
+        timezoneSelect.addEventListener('change', fillCurrentAddDateTime);
     }
 
     // EYEBALL 类型切换时自动填充日期
@@ -105,7 +126,7 @@ export function setupAutoDateTime() {
     if (typeSelect) {
         typeSelect.addEventListener('change', function() {
             if (this.value === 'EYEBALL') {
-                setTodayDate('addQsoDate');
+                setTodayDate('addQsoDate', selectedAddTimezone());
                 const timeInput = document.getElementById('addTimeOn');
                 if (timeInput) timeInput.value = '';
             }
@@ -121,6 +142,7 @@ export function collectFormData(form, qsoType) {
     data.call = form.querySelector('[name="call"]')?.value?.trim() || '';
     data.qso_date = form.querySelector('[name="qso_date"]')?.value?.replace(/-/g, '') || '';
     data.time_on = form.querySelector('[name="time_on"]')?.value?.replace(/:/g, '') || '';
+    data.input_timezone = form.querySelector('[name="input_timezone"]')?.value || 'UTC';
     data.qso_type = qsoType || 'NORMAL';
     data.qsl_status = form.querySelector('[name="qsl_status"]')?.value || '未发送';
     data.comment = form.querySelector('[name="comment"]')?.value?.trim() || '';
@@ -129,6 +151,7 @@ export function collectFormData(form, qsoType) {
     // 根据类型收集特定字段
     if (qsoType === 'SAT') {
         data.sat_name = form.querySelector('[name="sat_name"]')?.value?.trim() || '';
+        data.sat_mode = form.querySelector('#addSatFields [name="sat_mode"]')?.value?.trim() || '';
         data.tx_freq = form.querySelector('[name="tx_freq"]')?.value?.trim() || '';
         data.rx_freq = form.querySelector('[name="rx_freq"]')?.value?.trim() || '';
         data.mode = form.querySelector('#addSatFields [name="mode"]')?.value || '';
@@ -243,9 +266,8 @@ export function initAddForm(onSuccess) {
         if (result.ok) {
             showToast('QSO 记录已添加', 'success');
             this.reset();
-            setupFormTypeToggle('add');
-            setTodayDate('addQsoDate');
-            setNowBeijing('addTimeOn');
+            document.getElementById('addQsoTypeSelect')?.dispatchEvent(new Event('change'));
+            fillCurrentAddDateTime();
             onSuccess();
         } else if (result.duplicate) {
             if (confirm('检测到重复记录，是否仍然添加？')) {
@@ -257,9 +279,8 @@ export function initAddForm(onSuccess) {
                 if (retryResult.ok) {
                     showToast('QSO 记录已添加', 'success');
                     this.reset();
-                    setupFormTypeToggle('add');
-                    setTodayDate('addQsoDate');
-                    setNowBeijing('addTimeOn');
+                    document.getElementById('addQsoTypeSelect')?.dispatchEvent(new Event('change'));
+                    fillCurrentAddDateTime();
                     onSuccess();
                 } else {
                     showToast(retryResult.detail || '添加失败', 'error');

@@ -14,6 +14,7 @@ let lastSearchFilters = {};
 let lastRecentBand = '', lastRecentMode = '', lastRecentQsoType = '';
 let stationCallsign = 'BH7GUL';
 let stationName = 'QSL & Log Management';
+let visitorTimezone = 'Asia/Shanghai';
 
 // ===== 电台信息加载 =====
 async function loadStationInfo() {
@@ -22,9 +23,14 @@ async function loadStationInfo() {
         const data = await resp.json();
         stationCallsign = data.callsign || 'BH7GUL';
         stationName = data.station_name || 'QSL & Log Management';
+        visitorTimezone = data.visitor_timezone || 'Asia/Shanghai';
         document.title = `${stationCallsign} ${stationName}`;
         document.getElementById('stationTitle').textContent = `${stationCallsign} ${stationName}`;
         document.getElementById('searchInput').placeholder = `请输入呼号（如 ${stationCallsign}）`;
+        const timezoneLabel = visitorTimezone === 'UTC' ? 'UTC' : '北京时间';
+        document.querySelectorAll('.visitor-timezone-label').forEach(element => {
+            element.textContent = `时间（${timezoneLabel}）`;
+        });
     } catch (err) {
         console.error('Failed to load station info:', err);
     }

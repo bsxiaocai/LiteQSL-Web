@@ -13,7 +13,6 @@ from app.database import (
     update_log,
     update_qsl_status,
     delete_log,
-    get_all_logs,
     get_all_logs_filtered,
     get_logs_paginated,
     insert_logs_batch,
@@ -33,9 +32,12 @@ from app.database import (
     update_logs_sk_batch,
     get_logs_by_ids,
     async_db,
+    get_all_settings,
+    update_setting,
 )
 from app.adif_parser import parse_adif, export_adif
 from app.backup import create_backup, list_backups, get_backup_path, delete_backup, restore_backup
+from app.time_utils import VALID_TIMEZONES, normalize_qso_to_utc
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -72,8 +74,10 @@ class QSOBody(BaseModel):
     tx_freq: str = Field(default="")
     rx_freq: str = Field(default="")
     sat_name: str = Field(default="")
+    sat_mode: str = Field(default="")
     is_sk: int = Field(default=0)
     qth: str = Field(default="")
+    input_timezone: str = Field(default="UTC")
     force: bool = Field(default=False)
 
 class StatusBody(BaseModel):
@@ -100,6 +104,7 @@ class RestoreBody(BaseModel):
 class SettingsBody(BaseModel):
     callsign: Optional[str] = None
     station_name: Optional[str] = None
+    visitor_timezone: Optional[str] = None
 
 
 @router.get("/csrf-token")
@@ -269,9 +274,8 @@ async def add_log(request: Request, data: QSOBody):
     else:
         required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
-    data_dict = data.model_dump()
     for field in required_fields:
-        if not data_dict.get(field):
+        if not getattr(data, field, None):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
 
     # 自动推导 band（如果只有 freq 没有 band）
@@ -280,10 +284,18 @@ async def add_log(request: Request, data: QSOBody):
         if auto_band:
             data.band = auto_band
 
+    if data.input_timezone not in VALID_TIMEZONES:
+        raise HTTPException(status_code=400, detail="无效的录入时区")
+
+    data_dict = normalize_qso_to_utc(data.model_dump())
+
     # 重复检测（force=true 时跳过）
     if not data.force:
         if qso_type == "EYEBALL":
-            existing = await check_duplicate_eyeball(data.call, data.qso_date)
+            existing = await check_duplicate_eyeball(
+                data_dict["call"],
+                data_dict["qso_date"],
+            )
             if existing:
                 raise HTTPException(
                     status_code=409,
@@ -294,7 +306,13 @@ async def add_log(request: Request, data: QSOBody):
             if not band_for_check and data.freq:
                 band_for_check = freq_to_band(data.freq)
             if band_for_check:
-                existing = await check_duplicate(data.call, data.qso_date, data.time_on, band_for_check, data.mode)
+                existing = await check_duplicate(
+                    data_dict["call"],
+                    data_dict["qso_date"],
+                    data_dict["time_on"],
+                    band_for_check,
+                    data_dict["mode"],
+                )
                 if existing:
                     raise HTTPException(
                         status_code=409,
@@ -325,12 +343,14 @@ async def edit_log(log_id: int, request: Request, data: QSOBody):
     else:
         required_fields = ["call", "qso_date", "time_on", "freq", "mode", "rst_sent", "rst_rcvd", "qsl_status"]
 
-    data_dict = data.model_dump()
     for field in required_fields:
-        if not data_dict.get(field):
+        if not getattr(data, field, None):
             raise HTTPException(status_code=400, detail=f"{field} 不能为空")
 
-    if not await update_log(log_id, data_dict):
+    if data.input_timezone not in VALID_TIMEZONES:
+        raise HTTPException(status_code=400, detail="无效的录入时区")
+
+    if not await update_log(log_id, data.model_dump()):
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
 
@@ -563,7 +583,6 @@ async def restore_database(request: Request, body: RestoreBody):
 async def get_settings(request: Request):
     """获取所有系统设置"""
     await require_admin(request)
-    from app.database import get_all_settings
     return {"settings": await get_all_settings()}
 
 
@@ -572,15 +591,18 @@ async def update_settings(request: Request, body: SettingsBody):
     """更新系统设置"""
     await require_admin(request)
     validate_csrf_token(request)
-    from app.database import update_setting
 
     # 允许更新的设置项
     updated = []
     for key, value in body.model_dump(exclude_none=True).items():
-        if key in ("callsign", "station_name"):
+        if key in ("callsign", "station_name", "visitor_timezone"):
             if not isinstance(value, str):
                 raise HTTPException(status_code=400, detail=f"设置项 {key} 必须是字符串")
-            value = value.strip().upper() if key == "callsign" else value.strip()
+            value = value.strip()
+            if key == "callsign":
+                value = value.upper()
+            if key == "visitor_timezone" and value not in VALID_TIMEZONES:
+                raise HTTPException(status_code=400, detail="无效的访客显示时区")
             await update_setting(key, value)
             updated.append(key)
 
@@ -671,13 +693,15 @@ async def stats_summary(request: Request):
             total_callsigns = row["cnt"]
 
         async with db.execute(
-            "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of month')"
+            "SELECT COUNT(*) as cnt FROM logs "
+            "WHERE qso_date >= strftime('%Y%m%d', 'now', 'start of month')"
         ) as cursor:
             row = await cursor.fetchone()
             this_month = row["cnt"]
 
         async with db.execute(
-            "SELECT COUNT(*) as cnt FROM logs WHERE qso_date >= date('now', 'start of year')"
+            "SELECT COUNT(*) as cnt FROM logs "
+            "WHERE qso_date >= strftime('%Y%m%d', 'now', 'start of year')"
         ) as cursor:
             row = await cursor.fetchone()
             this_year = row["cnt"]
@@ -740,8 +764,9 @@ async def stats_by_month(request: Request, months: int = Query(12, ge=1, le=60))
     async with async_db() as db:
         months_modifier = f"-{int(months)} months"
         async with db.execute(
-            "SELECT substr(qso_date, 1, 7) as month, COUNT(*) as count "
-            "FROM logs WHERE qso_date >= date('now', ?) "
+            "SELECT substr(qso_date, 1, 4) || '-' || substr(qso_date, 5, 2) as month, "
+            "COUNT(*) as count FROM logs "
+            "WHERE qso_date >= strftime('%Y%m%d', 'now', ?) "
             "GROUP BY month ORDER BY month",
             (months_modifier,)
         ) as cursor:
@@ -774,4 +799,3 @@ async def stats_top_calls(request: Request, limit: int = Query(20, ge=1, le=100)
         ) as cursor:
             rows = await cursor.fetchall()
             return [{"call": row["call"], "count": row["count"]} for row in rows]
-

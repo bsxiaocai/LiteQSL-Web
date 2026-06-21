@@ -3,7 +3,7 @@
  */
 
 import { escapeHtml } from './utils.js';
-import { QSO_TYPE_LABELS, QSO_TYPE_ICONS, BAND_FREQ } from './constants.js';
+import { QSO_TYPE_LABELS, QSO_TYPE_ICONS } from './constants.js';
 
 // 频率转波段（前端版本，用于显示）
 export function freqToBand(freq) {
@@ -24,13 +24,6 @@ export function freqToBand(freq) {
     if (f >= 430.0 && f < 440.0) return '70cm';
     if (f >= 1240.0 && f < 1300.0) return '23cm';
     return '';
-}
-
-// 格式化频率显示
-export function formatFreqDisplay(log) {
-    if (log.freq) return escapeHtml(log.freq) + ' MHz';
-    if (log.band && BAND_FREQ[log.band]) return escapeHtml(BAND_FREQ[log.band]) + ' MHz';
-    return escapeHtml(log.band) || '-';
 }
 
 // 格式化日期：YYYYMMDD -> YYYY-MM-DD

@@ -7,6 +7,7 @@ import os
 from app.auth import setup_session_middleware
 from app.database import init_db
 from app.routes import public, admin
+from app.version import APP_VERSION
 
 
 @asynccontextmanager
@@ -15,7 +16,7 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(title="LiteQSL-Web", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="LiteQSL-Web", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 setup_session_middleware(app)
@@ -39,4 +40,4 @@ def admin_page():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.2.0"}
+    return {"status": "ok", "version": APP_VERSION}

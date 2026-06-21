@@ -14,12 +14,16 @@ async function loadSettings() {
         if (data.settings) {
             const callsignInput = document.getElementById('settingCallsign');
             const stationNameInput = document.getElementById('settingStationName');
+            const visitorTimezoneInput = document.getElementById('settingVisitorTimezone');
 
             if (callsignInput) {
                 callsignInput.value = data.settings.callsign || '';
             }
             if (stationNameInput) {
                 stationNameInput.value = data.settings.station_name || '';
+            }
+            if (visitorTimezoneInput) {
+                visitorTimezoneInput.value = data.settings.visitor_timezone || 'Asia/Shanghai';
             }
         }
     } catch (err) {
@@ -28,14 +32,15 @@ async function loadSettings() {
 }
 
 // 保存设置
-async function saveSettings(callsign, stationName) {
+async function saveSettings(callsign, stationName, visitorTimezone) {
     try {
         const resp = await fetch('/api/admin/settings', {
             method: 'PUT',
             headers: csrfHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
                 callsign: callsign,
-                station_name: stationName || 'QSL & Log Management'
+                station_name: stationName || 'QSL & Log Management',
+                visitor_timezone: visitorTimezone
             })
         });
 
@@ -66,6 +71,7 @@ export function initSettings() {
 
             const callsign = document.getElementById('settingCallsign').value.trim();
             const stationName = document.getElementById('settingStationName').value.trim();
+            const visitorTimezone = document.getElementById('settingVisitorTimezone').value;
 
             if (!callsign) {
                 showToast('请输入操作员呼号', 'error');
@@ -75,7 +81,7 @@ export function initSettings() {
             const btn = this.querySelector('button[type="submit"]');
             setLoading(btn, true);
 
-            await saveSettings(callsign, stationName);
+            await saveSettings(callsign, stationName, visitorTimezone);
 
             setLoading(btn, false);
         });

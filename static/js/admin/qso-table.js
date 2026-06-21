@@ -5,7 +5,7 @@
 import {
     escapeHtml, showToast, statusColor,
     formatDate, formatTime, formatTypeBadge, formatFreqCell,
-    renderPagination, QSL_STATUSES, QSO_TYPES, QSO_TYPE_LABELS
+    renderPagination, QSL_STATUSES
 } from '../common/index.js';
 import { csrfHeaders } from './auth.js';
 

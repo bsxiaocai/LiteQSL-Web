@@ -5,8 +5,14 @@ import csv
 import io
 from contextlib import contextmanager, asynccontextmanager
 from config import DATABASE_PATH
+from app.time_utils import (
+    TIMEZONE_BEIJING,
+    TIMEZONE_UTC,
+    convert_qso_datetime,
+    normalize_qso_to_utc,
+)
 
-QSL_STATUSES = ["无法考证", "未发送", "已发送", "无需发送", "电子确认"]
+QSL_STATUSES = ["无法考证", "未发送", "已发送", "已收到", "无需发送", "电子确认"]
 
 # QSO 类型枚举（存英文，前端显示中文）
 QSO_TYPES = ["NORMAL", "SAT", "REP", "EYEBALL"]
@@ -102,6 +108,85 @@ async def async_db():
         await db.close()
 
 
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row["name"] == column for row in rows)
+
+
+def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
+    column = definition.split()[0]
+    if not _column_exists(conn, table, column):
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+
+
+def _migration_1_schema(conn: sqlite3.Connection) -> None:
+    for definition in (
+        "qso_type TEXT DEFAULT 'NORMAL'",
+        "freq TEXT",
+        "tx_freq TEXT",
+        "rx_freq TEXT",
+        "sat_name TEXT",
+        "sat_mode TEXT",
+        "is_sk INTEGER DEFAULT 0",
+        "qth TEXT",
+    ):
+        _add_column(conn, "logs", definition)
+    _add_column(conn, "users", "first_login INTEGER DEFAULT 1")
+    _add_column(conn, "users", "password_version INTEGER DEFAULT 1")
+
+    conn.execute(
+        "UPDATE logs SET time_on='', mode='', rst_sent='', rst_rcvd='', freq='', band='', "
+        "tx_freq='', rx_freq='', sat_name='', sat_mode='' WHERE qso_type='EYEBALL'"
+    )
+    conn.execute("UPDATE logs SET time_on = substr(time_on, 1, 4) WHERE length(time_on) > 4")
+
+
+def _migration_2_utc_storage(conn: sqlite3.Connection) -> None:
+    """Convert legacy manual-entry timestamps (Beijing time) to canonical UTC."""
+    rows = conn.execute(
+        "SELECT id, qso_date, time_on FROM logs "
+        "WHERE qso_type != 'EYEBALL' AND length(qso_date) >= 8 AND length(time_on) >= 4"
+    ).fetchall()
+    for row in rows:
+        try:
+            qso_date, time_on = convert_qso_datetime(
+                row["qso_date"],
+                row["time_on"],
+                TIMEZONE_BEIJING,
+                TIMEZONE_UTC,
+            )
+        except ValueError:
+            continue
+        conn.execute(
+            "UPDATE logs SET qso_date = ?, time_on = ? WHERE id = ?",
+            (qso_date, time_on, row["id"]),
+        )
+
+
+MIGRATIONS = (
+    (1, _migration_1_schema),
+    (2, _migration_2_utc_storage),
+)
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    applied = {
+        row["version"]
+        for row in conn.execute("SELECT version FROM schema_version").fetchall()
+    }
+    for version, migration in MIGRATIONS:
+        if version in applied:
+            continue
+        migration(conn)
+        conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+
+
 def init_db():
     with get_db() as conn:
         conn.execute("""
@@ -116,6 +201,14 @@ def init_db():
                 rst_rcvd TEXT,
                 qsl_status TEXT DEFAULT '未发送',
                 comment TEXT,
+                qso_type TEXT DEFAULT 'NORMAL',
+                freq TEXT,
+                tx_freq TEXT,
+                rx_freq TEXT,
+                sat_name TEXT,
+                sat_mode TEXT,
+                is_sk INTEGER DEFAULT 0,
+                qth TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -124,68 +217,11 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                first_login INTEGER DEFAULT 1,
+                password_version INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # 添加索引优化查询性能
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_call ON logs(call)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_date ON logs(qso_date)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
-
-        # ===== 数据库迁移：添加新字段 =====
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN qso_type TEXT DEFAULT 'NORMAL'")
-        except Exception:
-            pass
-        try:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_type ON logs(qso_type)")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN freq TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN tx_freq TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN rx_freq TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN sat_name TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN is_sk INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE logs ADD COLUMN qth TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN first_login INTEGER DEFAULT 1")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE users ADD COLUMN password_version INTEGER DEFAULT 1")
-        except Exception:
-            pass
-
-        # ===== 数据清理迁移 =====
-        # 清理 Eyeball QSO 残留的无关字段
-        conn.execute(
-            "UPDATE logs SET time_on='', mode='', rst_sent='', rst_rcvd='', freq='', band='', "
-            "tx_freq='', rx_freq='', sat_name='' WHERE qso_type='EYEBALL'"
-        )
-        # 统一时间精度为 HHMM（去掉秒部分）
-        conn.execute("UPDATE logs SET time_on = substr(time_on, 1, 4) WHERE length(time_on) > 4")
-
-        # ===== 系统设置表 =====
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -193,6 +229,15 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        _run_migrations(conn)
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_call ON logs(call)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_date ON logs(qso_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_band ON logs(band)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_mode ON logs(mode)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qsl_status ON logs(qsl_status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_qso_type ON logs(qso_type)")
 
         conn.commit()
     seed_admin_user()
@@ -218,6 +263,7 @@ def seed_default_settings():
     default_settings = {
         "callsign": "BH7GUL",
         "station_name": "QSL & Log Management",
+        "visitor_timezone": TIMEZONE_BEIJING,
     }
     with get_db() as conn:
         for key, value in default_settings.items():
@@ -306,7 +352,10 @@ def _auto_fill_freq_band(data: dict) -> dict:
 
     # Eyeball QSO 只保留呼号、日期、卡片状态、地点，清理无关字段
     if data.get("qso_type") == "EYEBALL":
-        for field in ("time_on", "mode", "rst_sent", "rst_rcvd", "freq", "band", "tx_freq", "rx_freq", "sat_name"):
+        for field in (
+            "time_on", "mode", "rst_sent", "rst_rcvd", "freq", "band",
+            "tx_freq", "rx_freq", "sat_name", "sat_mode",
+        ):
             data[field] = ""
 
     freq = data.get("freq", "")
@@ -326,13 +375,13 @@ def _auto_fill_freq_band(data: dict) -> dict:
 
 
 async def insert_log(data: dict) -> int:
-    data = _auto_fill_freq_band(data)
+    data = _auto_fill_freq_band(normalize_qso_to_utc(data))
     db = await get_async_db()
     try:
         async with db.execute(
             """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                                 qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 qso_type, freq, tx_freq, rx_freq, sat_name, sat_mode, is_sk, qth)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 data.get("call", ""),
                 data.get("qso_date", ""),
@@ -348,6 +397,7 @@ async def insert_log(data: dict) -> int:
                 data.get("tx_freq", ""),
                 data.get("rx_freq", ""),
                 data.get("sat_name", ""),
+                data.get("sat_mode", ""),
                 1 if data.get("is_sk") else 0,
                 data.get("qth", ""),
             ),
@@ -363,11 +413,11 @@ async def insert_logs_batch(records: list[dict]) -> int:
     try:
         count = 0
         for rec in records:
-            rec = _auto_fill_freq_band(rec)
+            rec = _auto_fill_freq_band(normalize_qso_to_utc(rec))
             await db.execute(
                 """INSERT INTO logs (call, qso_date, time_on, band, mode, rst_sent, rst_rcvd, qsl_status, comment,
-                                     qso_type, freq, tx_freq, rx_freq, sat_name, is_sk, qth)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                     qso_type, freq, tx_freq, rx_freq, sat_name, sat_mode, is_sk, qth)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     rec.get("call", ""),
                     rec.get("qso_date", ""),
@@ -383,6 +433,7 @@ async def insert_logs_batch(records: list[dict]) -> int:
                     rec.get("tx_freq", ""),
                     rec.get("rx_freq", ""),
                     rec.get("sat_name", ""),
+                    rec.get("sat_mode", ""),
                     1 if rec.get("is_sk") else 0,
                     rec.get("qth", ""),
                 ),
@@ -390,29 +441,6 @@ async def insert_logs_batch(records: list[dict]) -> int:
             count += 1
         await db.commit()
         return count
-    finally:
-        await db.close()
-
-
-async def search_logs_by_call(call: str) -> list[dict]:
-    db = await get_async_db()
-    try:
-        async with db.execute(
-            "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC",
-            (f"%{_escape_like(call)}%",),
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(r) for r in rows]
-    finally:
-        await db.close()
-
-
-async def get_all_logs() -> list[dict]:
-    db = await get_async_db()
-    try:
-        async with db.execute("SELECT * FROM logs ORDER BY qso_date DESC, time_on DESC") as cursor:
-            rows = await cursor.fetchall()
-            return [dict(r) for r in rows]
     finally:
         await db.close()
 
@@ -455,12 +483,13 @@ async def get_all_logs_filtered(filters: dict = None) -> list[dict]:
 
 
 async def update_log(log_id: int, data: dict) -> bool:
-    data = _auto_fill_freq_band(data)
+    data = _auto_fill_freq_band(normalize_qso_to_utc(data))
     db = await get_async_db()
     try:
         async with db.execute(
             """UPDATE logs SET call=?, qso_date=?, time_on=?, band=?, mode=?, rst_sent=?, rst_rcvd=?, qsl_status=?,
-                               comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, is_sk=?, qth=? WHERE id=?""",
+                               comment=?, qso_type=?, freq=?, tx_freq=?, rx_freq=?, sat_name=?, sat_mode=?,
+                               is_sk=?, qth=? WHERE id=?""",
             (
                 data.get("call", ""),
                 data.get("qso_date", ""),
@@ -476,6 +505,7 @@ async def update_log(log_id: int, data: dict) -> bool:
                 data.get("tx_freq", ""),
                 data.get("rx_freq", ""),
                 data.get("sat_name", ""),
+                data.get("sat_mode", ""),
                 1 if data.get("is_sk") else 0,
                 data.get("qth", ""),
                 log_id,
@@ -638,7 +668,7 @@ def export_csv(records: list[dict]) -> str:
     writer.writerow([
         "CALL", "DATE", "TIME", "BAND", "FREQ", "MODE",
         "RST_SENT", "RST_RCVD", "QSL_STATUS", "COMMENT",
-        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME", "IS_SK", "QTH",
+        "QSO_TYPE", "TX_FREQ", "RX_FREQ", "SAT_NAME", "SAT_MODE", "IS_SK", "QTH",
     ])
     for rec in records:
         # 优先使用记录中存储的 freq，如果没有则从 BAND_FREQ_MAP 推导
@@ -658,6 +688,7 @@ def export_csv(records: list[dict]) -> str:
             rec.get("tx_freq", ""),
             rec.get("rx_freq", ""),
             rec.get("sat_name", ""),
+            rec.get("sat_mode", ""),
             rec.get("is_sk", 0),
             rec.get("qth", ""),
         ])
@@ -708,32 +739,6 @@ async def get_recent_logs_paginated(band: str = None, mode: str = None, qso_type
         async with db.execute(
             f"SELECT * FROM logs WHERE {where} ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
             params + [page_size, offset],
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return {
-                "logs": [dict(r) for r in rows],
-                "total": total,
-                "page": page,
-                "page_size": page_size,
-            }
-    finally:
-        await db.close()
-
-
-async def search_logs_by_call_paginated(call: str, page: int = 1, page_size: int = 20) -> dict:
-    """分页按呼号搜索通联记录"""
-    db = await get_async_db()
-    try:
-        async with db.execute(
-            "SELECT COUNT(*) as cnt FROM logs WHERE call LIKE ? ESCAPE '\\'",
-            (f"%{_escape_like(call)}%",),
-        ) as cursor:
-            row = await cursor.fetchone()
-            total = row["cnt"]
-        offset = (page - 1) * page_size
-        async with db.execute(
-            "SELECT * FROM logs WHERE call LIKE ? ESCAPE '\\' ORDER BY qso_date DESC, time_on DESC LIMIT ? OFFSET ?",
-            (f"%{_escape_like(call)}%", page_size, offset),
         ) as cursor:
             rows = await cursor.fetchall()
             return {

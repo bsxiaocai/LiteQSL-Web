@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
-from app.database import get_recent_logs_paginated, search_logs_by_call_paginated, get_setting, get_async_db
+from app.database import get_recent_logs_paginated, get_all_settings, get_async_db
 from app.database import _escape_like
+from app.time_utils import TIMEZONE_BEIJING, convert_record_timezone
 
 router = APIRouter(prefix="/api", tags=["public"])
 
@@ -8,12 +9,15 @@ router = APIRouter(prefix="/api", tags=["public"])
 @router.get("/station-info")
 async def station_info():
     """获取电台公开信息（呼号、站点名称）"""
-    callsign = await get_setting("callsign") or "BH7GUL"
-    station_name = await get_setting("station_name") or "QSL & Log Management"
+    settings = await get_all_settings()
+    callsign = settings.get("callsign") or "BH7GUL"
+    station_name = settings.get("station_name") or "QSL & Log Management"
+    visitor_timezone = settings.get("visitor_timezone") or TIMEZONE_BEIJING
     return {
         "callsign": callsign,
         "station_name": station_name,
         "title": f"{callsign} {station_name}",
+        "visitor_timezone": visitor_timezone,
     }
 
 
@@ -25,7 +29,21 @@ async def recent_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
-    return await get_recent_logs_paginated(band=band, mode=mode, qso_type=qso_type, page=page, page_size=page_size)
+    result = await get_recent_logs_paginated(
+        band=band,
+        mode=mode,
+        qso_type=qso_type,
+        page=page,
+        page_size=page_size,
+    )
+    settings = await get_all_settings()
+    timezone_name = settings.get("visitor_timezone") or TIMEZONE_BEIJING
+    result["logs"] = [
+        convert_record_timezone(record, timezone_name)
+        for record in result["logs"]
+    ]
+    result["timezone"] = timezone_name
+    return result
 
 
 @router.get("/search")
@@ -71,11 +89,17 @@ async def search_logs(
             params + [page_size, offset],
         ) as cursor:
             rows = await cursor.fetchall()
+            settings = await get_all_settings()
+            timezone_name = settings.get("visitor_timezone") or TIMEZONE_BEIJING
             return {
-                "logs": [dict(r) for r in rows],
+                "logs": [
+                    convert_record_timezone(dict(row), timezone_name)
+                    for row in rows
+                ],
                 "total": total,
                 "page": page,
                 "page_size": page_size,
+                "timezone": timezone_name,
             }
     finally:
         await db.close()

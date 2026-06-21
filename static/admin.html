@@ -135,13 +135,21 @@
                         </div>
                         <!-- 时间字段：普通/中继/卫星通联显示，Eyeball 隐藏 -->
                         <div id="addTimeGroup">
-                            <label class="block text-sm text-gray-600 mb-1">时间 (北京时间)</label>
+                            <label class="block text-sm text-gray-600 mb-1">时间</label>
                             <div class="flex gap-2">
                                 <input type="time" id="addTimeOn" name="time_on"
                                     class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                 <button type="button" id="addNowBtn"
                                     class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在</button>
                             </div>
+                        </div>
+                        <div id="addTimezoneGroup">
+                            <label class="block text-sm text-gray-600 mb-1">录入时区</label>
+                            <select id="addInputTimezone" name="input_timezone"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Asia/Shanghai">北京时间</option>
+                                <option value="UTC">UTC</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-600 mb-1">QSO 类型</label>
@@ -216,6 +224,11 @@
                                         <option>PSK31</option><option>RTTY</option><option>JS8</option>
                                         <option>SSTV</option><option>DIGITAL</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm text-gray-600 mb-1">卫星模式</label>
+                                    <input type="text" name="sat_mode" placeholder="如 U/V"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                                 </div>
                                 <div>
                                     <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
@@ -296,7 +309,7 @@
                             <label class="block text-sm text-gray-600 mb-1">卡片状态</label>
                             <select name="qsl_status"
                                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                <option>未发送</option><option>已发送</option>
+                                <option>未发送</option><option>已发送</option><option>已收到</option>
                                 <option>无需发送</option><option>电子确认</option>
                                 <option>无法考证</option>
                             </select>
@@ -365,7 +378,7 @@
             <section class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">系统设置</h2>
                 <form id="settingsForm" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm text-gray-600 mb-1">操作员呼号</label>
                             <input type="text" id="settingCallsign" placeholder="如 BH7GUL"
@@ -377,6 +390,15 @@
                             <input type="text" id="settingStationName" placeholder="如 QSL & Log Management"
                                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <p class="text-xs text-gray-400 mt-1">显示在访客界面标题中的站点名称</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-1">访客时间显示</label>
+                            <select id="settingVisitorTimezone"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Asia/Shanghai">北京时间</option>
+                                <option value="UTC">UTC</option>
+                            </select>
+                            <p class="text-xs text-gray-400 mt-1">访客页面的日期和时间统一按此时区显示</p>
                         </div>
                     </div>
                     <div class="flex gap-3">
@@ -424,7 +446,7 @@
                         <label class="block text-xs text-gray-500 mb-1">卡片状态</label>
                         <select id="filterStatus" class="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <option value="">全部</option>
-                            <option>未发送</option><option>已发送</option>
+                            <option>未发送</option><option>已发送</option><option>已收到</option>
                             <option>无需发送</option><option>电子确认</option>
                             <option>无法考证</option>
                         </select>
@@ -468,8 +490,8 @@
                                     <input type="checkbox" id="selectAll" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
                                 </th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">呼号</th>
-                                <th class="px-3 py-2 text-center whitespace-nowrap">日期</th>
-                                <th class="px-3 py-2 text-center whitespace-nowrap">时间</th>
+                                <th class="px-3 py-2 text-center whitespace-nowrap">日期 (UTC)</th>
+                                <th class="px-3 py-2 text-center whitespace-nowrap">时间 (UTC)</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">频率/波段</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">模式</th>
                                 <th class="px-3 py-2 text-center whitespace-nowrap">类型</th>
@@ -667,13 +689,21 @@
                     </div>
                     <!-- 时间字段：普通/中继/卫星通联显示，Eyeball 隐藏 -->
                     <div id="editTimeGroup">
-                        <label class="block text-sm text-gray-600 mb-1">时间 (北京时间)</label>
+                        <label class="block text-sm text-gray-600 mb-1">时间</label>
                         <div class="flex gap-2">
                             <input type="time" id="editTimeOn"
                                 class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <button type="button" id="editNowBtn"
                                 class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">现在</button>
                         </div>
+                    </div>
+                    <div id="editTimezoneGroup">
+                        <label class="block text-sm text-gray-600 mb-1">录入时区</label>
+                        <select id="editInputTimezone"
+                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="UTC">UTC</option>
+                            <option value="Asia/Shanghai">北京时间</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-sm text-gray-600 mb-1">QSO 类型</label>
@@ -748,6 +778,11 @@
                                     <option>PSK31</option><option>RTTY</option><option>JS8</option>
                                     <option>SSTV</option><option>DIGITAL</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1">卫星模式</label>
+                                <input type="text" id="editSatelliteMode" placeholder="如 U/V"
+                                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             </div>
                             <div>
                                 <label class="block text-sm text-gray-600 mb-1">RST 发送</label>
@@ -828,7 +863,7 @@
                         <label class="block text-sm text-gray-600 mb-1">卡片状态</label>
                         <select id="editQslStatus"
                             class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                            <option>未发送</option><option>已发送</option>
+                            <option>未发送</option><option>已发送</option><option>已收到</option>
                             <option>无需发送</option><option>电子确认</option>
                             <option>无法考证</option>
                         </select>

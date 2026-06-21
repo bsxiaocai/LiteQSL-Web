@@ -2,7 +2,7 @@
  * 编辑弹窗管理
  */
 
-import { showToast, setLoading, escapeHtml, freqToBand, QSL_STATUSES } from '../common/index.js';
+import { showToast, setLoading } from '../common/index.js';
 import { csrfHeaders } from './auth.js';
 import { getAllLogs, loadLogs, getCurrentPage, getCurrentFilters } from './qso-table.js';
 
@@ -23,6 +23,7 @@ export function openEditModal(id) {
     document.getElementById('editCall').value = log.call || '';
     document.getElementById('editQsoDate').value = formatDateForInput(log.qso_date);
     document.getElementById('editTimeOn').value = formatTimeForInput(log.time_on);
+    document.getElementById('editInputTimezone').value = 'UTC';
     document.getElementById('editQsoType').value = log.qso_type || 'NORMAL';
     document.getElementById('editQslStatus').value = log.qsl_status || '未发送';
     document.getElementById('editComment').value = log.comment || '';
@@ -36,6 +37,7 @@ export function openEditModal(id) {
         document.getElementById('editTxFreq').value = log.tx_freq || '';
         document.getElementById('editRxFreq').value = log.rx_freq || '';
         document.getElementById('editSatMode').value = log.mode || '';
+        document.getElementById('editSatelliteMode').value = log.sat_mode || '';
         document.getElementById('editSatRstSent').value = log.rst_sent || '';
         document.getElementById('editSatRstRcvd').value = log.rst_rcvd || '';
     } else if (log.qso_type === 'REP') {
@@ -71,6 +73,7 @@ function toggleEditFields(qsoType) {
     document.getElementById('editRepFields').classList.toggle('hidden', qsoType !== 'REP');
     document.getElementById('editEyeballFields').classList.toggle('hidden', qsoType !== 'EYEBALL');
     document.getElementById('editTimeGroup').classList.toggle('hidden', qsoType === 'EYEBALL');
+    document.getElementById('editTimezoneGroup').classList.toggle('hidden', qsoType === 'EYEBALL');
 }
 
 // 格式化日期为 input[type="date"] 格式
@@ -93,6 +96,7 @@ function collectEditData() {
     data.call = document.getElementById('editCall').value.trim();
     data.qso_date = document.getElementById('editQsoDate').value.replace(/-/g, '');
     data.time_on = document.getElementById('editTimeOn').value.replace(/:/g, '');
+    data.input_timezone = document.getElementById('editInputTimezone').value;
     data.qso_type = qsoType;
     data.qsl_status = document.getElementById('editQslStatus').value;
     data.comment = document.getElementById('editComment').value.trim();
@@ -100,6 +104,7 @@ function collectEditData() {
 
     if (qsoType === 'SAT') {
         data.sat_name = document.getElementById('editSatName').value.trim();
+        data.sat_mode = document.getElementById('editSatelliteMode').value.trim();
         data.tx_freq = document.getElementById('editTxFreq').value.trim();
         data.rx_freq = document.getElementById('editRxFreq').value.trim();
         data.mode = document.getElementById('editSatMode').value;
@@ -199,22 +204,34 @@ export function setupEditDateTimeButtons() {
 
     if (editTodayBtn) {
         editTodayBtn.addEventListener('click', function() {
-            const now = new Date();
-            const dateStr = now.getFullYear() + '-' +
-                String(now.getMonth() + 1).padStart(2, '0') + '-' +
-                String(now.getDate()).padStart(2, '0');
-            document.getElementById('editQsoDate').value = dateStr;
+            setEditNow(true, false);
         });
     }
 
     if (editNowBtn) {
         editNowBtn.addEventListener('click', function() {
-            const now = new Date();
-            const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-            const beijing = new Date(utcMs + 8 * 3600000);
-            const timeStr = String(beijing.getHours()).padStart(2, '0') + ':' +
-                String(beijing.getMinutes()).padStart(2, '0');
-            document.getElementById('editTimeOn').value = timeStr;
+            setEditNow(false, true);
         });
+    }
+}
+
+function setEditNow(setDate, setTime) {
+    const timeZone = document.getElementById('editInputTimezone')?.value || 'UTC';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    if (setDate) {
+        document.getElementById('editQsoDate').value =
+            `${values.year}-${values.month}-${values.day}`;
+    }
+    if (setTime) {
+        document.getElementById('editTimeOn').value = `${values.hour}:${values.minute}`;
     }
 }

@@ -4,7 +4,7 @@
 
 现代化、简洁、具有无线电特色的在线日志展示系统，适用于个人或小集体台使用。
 
-> **当前版本：v1.2.0** | [更新日志](doc/v1.2.0-changelog.md) | [短期改进计划](doc/short-term-plan.md)
+> **当前版本：v1.3.0** | [更新日志](doc/v1.3.0-changelog.md) | [短期改进计划](doc/short-term-plan.md)
 
 ---
 
@@ -46,7 +46,8 @@
 ### 后台管理
 
 - **呼号配置** — 支持自定义操作员呼号和站点名称，自动替换访客界面显示
-- **自动日期时间** — 录入时自动填充日期和 UTC 时间，支持「今天」「现在 UTC」快捷按钮
+- **双时区录入** — 可选择按北京时间或 UTC 录入，数据库统一保存 UTC
+- **访客显示时区** — 管理后台可选择访客表格统一显示北京时间或 UTC
 - **分页与筛选** — 支持多条件组合筛选，高效管理大量记录
 - **首次登录强制改密** — 默认管理员首次登录后必须修改用户名和密码
 - **密码修改** — 支持修改管理员密码，含实时强度校验
@@ -332,7 +333,7 @@ LiteQSL-Web/
 | `id` | INTEGER | 主键，自增 |
 | `call` | TEXT | 对方呼号 |
 | `qso_date` | TEXT | 通联日期（YYYYMMDD） |
-| `time_on` | TEXT | 通联时间（HHMMSS） |
+| `time_on` | TEXT | UTC 通联时间（HHMM） |
 | `freq` | TEXT | 主频率（MHz），如 `14.270` |
 | `band` | TEXT | 波段，由频率自动推导 |
 | `mode` | TEXT | 模式，如 SSB、CW、FT8 |
@@ -399,7 +400,8 @@ LiteQSL-Web/
 | `PROP_MODE` | — | 自动推导 qso_type（SAT/RPT） |
 | `RST_SENT` | rst_sent | 信号报告（发送） |
 | `RST_RCVD` | rst_rcvd | 信号报告（接收） |
-| `QSL_STATUS` | qsl_status | 卡片状态 |
+| `QSL_SENT` / `QSL_RCVD` | qsl_status | 标准纸质 QSL 状态 |
+| `EQSL_QSL_RCVD` / `LOTW_QSL_RCVD` | qsl_status | 电子确认状态 |
 | `COMMENT` / `NOTES` | comment | 备注 |
 
 ### 导出行为
@@ -467,6 +469,7 @@ LiteQSL-Web/
 | 版本 | 日期 | 主要更新 |
 |------|------|---------|
 | v1.2.0 | 2026-06-05 | 前端模块化重构、高级搜索、自动日期时间、呼号配置 |
+| v1.3.0 | 2026-06-21 | ADIF 标准化、UTC 存储、时区显示设置、数据库迁移与测试 |
 | v1.1.0 | 2026-05-29 | QSO 类型系统、Eyeball QSO、首次登录改密 |
 | v1.0.0 | 2026-05-20 | 初始版本，核心功能发布 |
 
