@@ -218,7 +218,79 @@ python reset_password.py
 
 ## 生产部署
 
-以下示例使用 systemd 运行 Uvicorn：
+### 一键部署脚本（推荐）
+
+仓库根目录提供了 `deploy.sh` 一键部署脚本，用于在服务器上完成「停止旧进程 → 检查并更新代码 → 更新依赖 → 启动进程」的完整流程。克隆仓库后，直接执行即可完成部署：
+
+```bash
+cd LiteQSL-Web
+chmod +x deploy.sh
+./deploy.sh
+```
+
+脚本会按顺序自动完成以下四个步骤：
+
+1. **停止现有进程**：自动识别并停止正在运行的 LiteQSL-Web 进程，覆盖三种情况——systemd 服务（`systemctl stop`）、本脚本管理的守护进程（通过 PID 文件 + 停止标记优雅退出）、手动启动的 uvicorn（`pkill` 兜底清理）。
+2. **检查并更新代码**：访问 GitHub 仓库，对比本地与 `origin/main` 的提交；有新代码才执行 `git pull --ff-only`（本地有改动会先 `stash` 暂存、拉取后自动恢复），目录尚未克隆时则自动克隆仓库。
+3. **更新依赖**：自动创建 `.venv` 虚拟环境，并执行 `pip install --upgrade -r requirements.txt`。
+4. **启动进程**：以“进程崩溃自动重启、除非人为停止否则不会停止”的方式常驻运行。
+
+#### 启动方式
+
+脚本会根据运行环境自动选择启动方式：
+
+| 场景 | 启动方式 | 常驻保证 |
+|------|---------|---------|
+| root 且存在 systemd | 安装为 `liteqsl-web` systemd 服务 | `Restart=always`，崩溃自动拉起、开机自启 |
+| 普通用户 / 容器 | 后台守护循环 | 崩溃后自动重启，仅收到停止标记才退出 |
+
+systemd 方式下脚本会自动生成 `/etc/systemd/system/liteqsl-web.service` 并执行 `systemctl enable`；守护循环方式会把进程 PID 和日志写入仓库内的 `.run/` 目录（已被 Git 忽略）。
+
+#### 子命令
+
+| 命令 | 说明 |
+|------|------|
+| `./deploy.sh` 或 `./deploy.sh deploy` | 一键部署：停止 → 更新代码 → 更新依赖 → 启动 |
+| `./deploy.sh start` | 停止旧进程并启动 |
+| `./deploy.sh stop` | 停止服务 |
+| `./deploy.sh restart` | 重启服务 |
+| `./deploy.sh update` | 仅拉取更新并更新依赖 |
+| `./deploy.sh status` | 查看运行状态与健康检查 |
+
+#### 环境变量
+
+脚本支持通过环境变量覆盖默认配置：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `LITEQSL_HOST` | 监听地址 | `0.0.0.0` |
+| `LITEQSL_PORT` | 监听端口 | `8000` |
+| `LITEQSL_PYTHON` | Python 命令 | `python3` |
+| `LITEQSL_BRANCH` | 仓库分支 | `main` |
+| `LITEQSL_USER` | systemd 运行用户 | 当前用户 |
+| `LITEQSL_SECRET_KEY` | 生产环境 Session 密钥 | 未设置 |
+| `LITEQSL_RESTART_DELAY` | 崩溃后重启延迟秒数 | `5` |
+
+示例（设置固定密钥并指定端口）：
+
+```bash
+LITEQSL_SECRET_KEY="$(openssl rand -hex 32)" LITEQSL_PORT=8000 ./deploy.sh
+```
+
+#### 手动停止
+
+- systemd 方式：`sudo systemctl stop liteqsl-web`
+- 守护循环方式：`./deploy.sh stop`
+
+#### 注意事项
+
+- 脚本依赖 `bash`、`git`，以及带 `venv` 模块的 Python 3（`python3`）。
+- systemd 方式需要以 root 运行；普通用户环境下会自动退化为守护循环方式。
+- 生产环境强烈建议通过 `LITEQSL_SECRET_KEY` 提供固定且随机的 `SECRET_KEY`。
+- 更新流程不会覆盖或删除 `data/` 下的数据库、密钥和备份。
+- `run.py` 中的 `reload=True` 仅用于开发调试；部署脚本以生产模式用 `uvicorn` 直接启动（不带 `--reload`）。
+
+如需手动配置 systemd（不使用脚本时），可参考以下示例（`deploy.sh` 以 root + systemd 运行时也会自动生成类似单元文件）：
 
 ```ini
 [Unit]
@@ -272,13 +344,23 @@ export TRUST_PROXY=true
 
 ## 升级
 
-升级前请先在管理后台下载数据库备份，然后更新代码并重启服务：
+升级前请先在管理后台下载数据库备份，然后更新代码并重启服务。
+
+推荐直接运行一键部署脚本，它会自动停止旧进程、检查并拉取更新、更新依赖并重启：
+
+```bash
+./deploy.sh
+```
+
+也可以手动执行：
 
 ```bash
 git pull
 pip install -r requirements.txt
-sudo systemctl restart liteqsl
+sudo systemctl restart liteqsl-web
 ```
+
+> 使用 `deploy.sh` 时，systemd 服务名为 `liteqsl-web`。若使用上文手写的 systemd 单元文件，请把上面的服务名替换为你实际安装的服务名。
 
 应用启动时会自动执行数据库迁移。v1.3.0 首次启动会将旧版记录按原有北京时间语义转换为 UTC，因此迁移后不建议直接降级到旧版本。
 
@@ -368,6 +450,7 @@ LiteQSL-Web/
 ├── tests/                   # 自动化测试
 ├── data/                    # 本地数据，不提交到 Git
 ├── config.py
+├── deploy.sh               # 服务器一键部署脚本
 ├── requirements.txt
 ├── reset_password.py
 └── run.py
