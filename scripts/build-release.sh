@@ -81,4 +81,13 @@ for entry in "${PLATFORMS[@]}"; do
 done
 
 log "构建完成，产物在 $DIST"
+
+# 生成校验和清单（发布时一并上传）
+if command -v sha256sum >/dev/null 2>&1; then
+  ( cd "$DIST" && sha256sum liteqsl-*.tar.gz > SHA256SUMS )
+elif command -v shasum >/dev/null 2>&1; then
+  ( cd "$DIST" && shasum -a 256 liteqsl-*.tar.gz > SHA256SUMS )
+fi
+[ -f "$DIST/SHA256SUMS" ] && log "已生成校验和清单: $DIST/SHA256SUMS"
+
 ls -lh "$DIST" | sed '1d'
