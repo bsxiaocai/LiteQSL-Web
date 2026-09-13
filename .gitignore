@@ -1,42 +1,61 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-*.egg
+# =============================================================================
+# LiteQSL-Web .gitignore
+# 原则：本地数据、用户运行时产生的数据、本地配置与构建产物一律不提交。
+# =============================================================================
 
-# Virtual environments
-.venv/
-venv/
-ENV/
-
-# Database
+# ---- Runtime data: database / session key / backups -------------------------
+# 数据目录（数据库、.secret_key、backups/ 都在这里）
 data/
+# SQLite 数据库及其附属文件（含 WAL / SHM / journal）
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+# 会话签名密钥
+.secret_key
+# 备份文件（data/backups/ 或手工备份）
+backups/
+*.bak
 
-# Environment variables
+# ---- Local config (may contain secrets; created by the user) ----------------
+# 由 config.example.yaml 生成，可能写入 SECRET_KEY
+config.yaml
+config.local.yaml
 .env
+.env.*
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# ---- Deployment runtime state (deploy.sh: pid / log / stop flag) ------------
+.run/
+*.pid
+*.log
 
-# Claude Code
-.claude/
+# ---- Build artifacts -------------------------------------------------------
+/dist/
+/build/
+/liteqsl
+/liteqsl.exe
+*.exe
+*.test
+*.out
+*.cover
+coverage.out
 
-# Local release notes and working documents
+# ---- Local working documents ----------------------------------------------
 local-docs/
 
-# Deployment runtime state (deploy.sh pid / log / stop flag)
-.run/
+# ---- Editors / tools ------------------------------------------------------
+.idea/
+.vscode/
+.fleet/
+*.iml
+*.swp
+*.swo
+.claude/
 
-# OS
+# ---- OS -------------------------------------------------------------------
 .DS_Store
 Thumbs.db
+Desktop.ini
 cookies.txt

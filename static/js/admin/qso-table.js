@@ -76,6 +76,13 @@ export async function loadLogs(page = 1, filters = {}) {
                 showToast('请先登录', 'error');
                 return { logs: [], total: 0, page: 1, page_size: 50 };
             }
+            if (resp.status === 403) {
+                // 首次登录未完成：强制弹出凭据修改窗口（不提示加载失败）
+                if (typeof window.openFirstLoginModal === 'function') {
+                    window.openFirstLoginModal();
+                }
+                return { logs: [], total: 0, page: 1, page_size: 50 };
+            }
             showToast('加载记录失败', 'error');
             return { logs: [], total: 0, page: 1, page_size: 50 };
         }

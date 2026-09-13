@@ -1,0 +1,46 @@
+# =============================================================================
+# LiteQSL-Web v2 systemd 服务单元
+#
+# 安装方式（推荐用仓库根目录的 deploy.sh 自动安装）:
+#   sudo cp deploy/liteqsl.service /etc/systemd/system/liteqsl.service
+#   sudo sed -i 's#/opt/liteqsl#/你的/部署目录#g' /etc/systemd/system/liteqsl.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now liteqsl
+#
+# 部署目录需包含：liteqsl（二进制）、static/、config.yaml、data/
+# =============================================================================
+[Unit]
+Description=LiteQSL-Web v2 - 业余无线电 QSO/QSL 日志与卡片管理系统
+Documentation=https://github.com/bsxiaocai/LiteQSL-Web
+After=network.target
+
+[Service]
+Type=simple
+
+# 运行用户/组（按需改为实际用户）
+User=liteqsl
+Group=liteqsl
+
+# 部署目录（含 liteqsl / static/ / config.yaml / data/）
+WorkingDirectory=/opt/liteqsl
+ExecStart=/opt/liteqsl/liteqsl -config /opt/liteqsl/config.yaml
+
+# 崩溃自动重启、开机自启
+Restart=always
+RestartSec=5
+
+# 会话签名密钥（建议设置固定随机值：openssl rand -hex 32）
+# 不设置时程序会自动生成并保存到 data/.secret_key
+#Environment="SECRET_KEY=请替换为随机密钥"
+# 部署在 Nginx/Caddy 等反向代理之后时启用（否则会信任伪造的 X-Forwarded-For）
+#Environment="TRUST_PROXY=true"
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# 仅允许写 data/ 目录（数据库、密钥、备份都在这里）
+ReadWritePaths=/opt/liteqsl/data
+
+[Install]
+WantedBy=multi-user.target

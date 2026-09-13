@@ -2,7 +2,7 @@
  * 管理后台主入口
  */
 
-import { showToast } from '../common/index.js';
+import { showToast, loadAppVersion } from '../common/index.js';
 import { checkLogin, initLoginForm, initLogoutButton, initChangePasswordModal, fetchCsrfToken } from './auth.js';
 import { loadLogs, initFilters, registerGlobalFunctions } from './qso-table.js';
 import { initAddForm } from './qso-form.js';
@@ -14,9 +14,15 @@ import { startClock } from '../common/clock.js';
 import { initTabs } from './stats.js';
 
 // 显示管理后台
-function showAdmin() {
+async function showAdmin() {
     document.getElementById('loginPage').classList.add('hidden');
     document.getElementById('adminPage').classList.remove('hidden');
+
+    // 首次登录未完成时：强制先修改用户名和密码。
+    // 此时不加载任何管理数据、也不初始化其他模块，确保修改完成前无法进行任何操作。
+    if (await needFirstLoginChange()) {
+        return;
+    }
 
     // 初始化各个模块
     loadLogs(1, {});
@@ -28,23 +34,24 @@ function showAdmin() {
     initBackup();
     initSettings();
     initTabs();
-
-    // 检查首次登录
-    checkFirstLogin();
 }
 
-// 检查首次登录状态
-async function checkFirstLogin() {
+// 查询是否需要强制修改首次登录凭据。
+// 需要时立即弹出不可跳过的弹窗并返回 true；查询失败时返回 false（后端仍会拦截操作）。
+async function needFirstLoginChange() {
     try {
         const resp = await fetch('/api/admin/first-login-status');
-        const data = await resp.json();
-
-        if (data.first_login) {
-            openFirstLoginModal();
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.first_login) {
+                openFirstLoginModal();
+                return true;
+            }
         }
     } catch (err) {
         console.error('Failed to check first login:', err);
     }
+    return false;
 }
 
 // 打开首次登录弹窗
@@ -181,8 +188,14 @@ export async function init() {
     // 启动时钟
     startClock();
 
+    // 加载页脚版本号
+    loadAppVersion();
+
     // 初始化首次登录表单
     initFirstLoginForm();
+
+    // 供其他模块在遇到 403（未完成首次登录）时重新弹出强制修改弹窗
+    window.openFirstLoginModal = openFirstLoginModal;
 
     // 初始化密码强度指示器
     initPasswordStrength();

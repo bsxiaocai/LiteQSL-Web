@@ -5,7 +5,7 @@
 import {
     escapeHtml, showToast, statusColor,
     formatDate, formatTime, formatTypeBadge, formatFreqCell, freqToBand,
-    renderPagination, startClock
+    renderPagination, startClock, loadAppVersion
 } from '../common/index.js';
 
 // ===== 状态变量 =====
@@ -142,6 +142,9 @@ window.goSearchPage = function(page) {
 export function init() {
     // 加载电台信息
     loadStationInfo();
+
+    // 加载页脚版本号
+    loadAppVersion();
 
     // 加载最近通联
     loadRecent();

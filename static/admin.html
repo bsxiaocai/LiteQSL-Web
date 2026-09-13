@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理后台 - LiteQSL-Web</title>
     <script src="/static/css/tailwind.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/js/vendor/chart.umd.min.js"></script>
     <style>
         /* 表格响应式样式 */
         .overflow-x-auto {
@@ -512,6 +512,7 @@
                                 <option value="">修改状态为...</option>
                                 <option value="未发送">未发送</option>
                                 <option value="已发送">已发送</option>
+                                <option value="已收到">已收到</option>
                                 <option value="无需发送">无需发送</option>
                                 <option value="电子确认">电子确认</option>
                                 <option value="无法考证">无法考证</option>
@@ -619,7 +620,8 @@
 
         <footer class="text-center text-gray-500 py-6 text-sm">
             <a href="https://github.com/bsxiaocai/LiteQSL-Web" target="_blank" class="hover:text-blue-600">LiteQSL-Web</a>
-            &copy; 2026 | Powered by FastAPI + SQLite |
+            <span id="appVersion" class="text-gray-400"></span>
+            &copy; 2026 | Powered by Go + SQLite |
             <a href="https://blog.bh7gul.top" target="_blank" class="hover:text-blue-600">访问主站</a>
         </footer>
     </div>

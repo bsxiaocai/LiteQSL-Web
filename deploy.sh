@@ -1,35 +1,36 @@
 #!/usr/bin/env bash
 # =============================================================================
-# LiteQSL-Web 一键部署 / 启动脚本（Linux 服务器）
+# LiteQSL-Web v2 部署 / 启动脚本（Go 单体程序版，无需 Python/pip/venv）
 #
-# 直接执行（不带参数）会依次完成：
+# 不带参数执行会依次完成：
 #   1. 停止现有 LiteQSL-Web 进程
-#   2. 访问 GitHub 仓库，检查是否有新代码，有则拉取（未克隆时自动克隆）
-#   3. 更新 Python 依赖（创建虚拟环境并安装 requirements.txt）
-#   4. 启动 LiteQSL-Web 进程，并保证“除非人为停止，否则不会停止”
+#   2. 准备二进制（本地已有则直接用；否则从发布地址下载；再否则用 Go 从源码构建）
+#   3. 准备运行布局（static/、config.yaml、data/）
+#   4. 启动服务，并保证“除非人为停止，否则不会停止”
 #
 # 启动方式自动选择：
-#   - 以 root 运行且存在 systemd 时：安装为 systemd 服务（Restart=always，进程
-#     崩溃会被 systemd 自动拉起，手动停止用 `systemctl stop liteqsl-web`）
-#   - 其它情况（普通用户 / 容器）：以“守护循环”方式后台运行，进程崩溃后自动
-#     重启，手动停止用 `./deploy.sh stop`
+#   - root 且存在 systemd：安装为 systemd 服务（Restart=always，开机自启）
+#   - 其它情况（普通用户 / 容器）：守护循环后台运行，崩溃自动重启
 #
 # 常用命令：
-#   ./deploy.sh          一键部署（停止 -> 更新 -> 装依赖 -> 启动）
-#   ./deploy.sh start    停止旧进程并启动
-#   ./deploy.sh stop     停止服务
-#   ./deploy.sh restart  重启服务
-#   ./deploy.sh update   仅拉取更新 + 更新依赖
-#   ./deploy.sh status   查看运行状态
+#   ./deploy.sh                  一键部署（停止 -> 取二进制 -> 准备布局 -> 启动）
+#   ./deploy.sh start            停止旧进程并启动
+#   ./deploy.sh stop             停止服务
+#   ./deploy.sh restart          重启服务
+#   ./deploy.sh update           仅更新二进制（下载/构建）并重启
+#   ./deploy.sh build            仅用 Go 从源码构建二进制
+#   ./deploy.sh status           查看运行状态与健康检查
+#   ./deploy.sh install-service  仅安装 systemd 服务
 #
-# 可选环境变量（均有默认值，通常无需设置）：
-#   LITEQSL_HOST          监听地址          (默认 0.0.0.0)
-#   LITEQSL_PORT          监听端口          (默认 8000)
-#   LITEQSL_PYTHON        Python 命令       (默认 python3)
-#   LITEQSL_BRANCH        分支              (默认 main)
-#   LITEQSL_USER          systemd 运行用户  (默认当前用户)
-#   LITEQSL_SECRET_KEY    生产环境 Session 密钥（强烈建议设置）
-#   LITEQSL_RESTART_DELAY 崩溃后重启延迟秒数(默认 5)
+# 可选环境变量：
+#   LITEQSL_RELEASE_URL   发布下载基地址（默认空；设置后优先下载二进制）
+#                         例: https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download
+#   LITEQSL_HOST          监听地址（写入 config.yaml 时的默认值，默认 0.0.0.0）
+#   LITEQSL_PORT          监听端口（默认 8000）
+#   LITEQSL_USER          systemd 运行用户（默认当前用户）
+#   LITEQSL_SECRET_KEY    会话密钥（写入 systemd 环境变量）
+#   LITEQSL_RESTART_DELAY 崩溃后重启延迟秒数（默认 5）
+#   GO                    go 命令（默认 go）
 #
 # 首次使用：chmod +x deploy.sh
 # =============================================================================
@@ -38,33 +39,43 @@ set -o pipefail
 
 # ----------------------------- 配置区 ----------------------------------------
 APP_NAME="LiteQSL-Web"
-REPO_URL="https://github.com/bsxiaocai/LiteQSL-Web.git"
+REPO_URL="${LITEQSL_REPO_URL:-https://github.com/bsxiaocai/LiteQSL-Web.git}"
 BRANCH="${LITEQSL_BRANCH:-main}"
 
-# 部署目录 = 本脚本所在目录（即仓库根目录）
+# 部署目录 = 本脚本所在目录
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_PATH="$DEPLOY_DIR/$(basename "${BASH_SOURCE[0]}")"
 
-VENV_DIR="$DEPLOY_DIR/.venv"
-RUN_DIR="$DEPLOY_DIR/.run"          # 运行时状态目录（pid / 日志 / 停止标记）
+# Windows(Git Bash/MSYS2) 下二进制带 .exe 后缀
+case "$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')" in
+  mingw*|msys*|cygwin*) BINARY_NAME="liteqsl.exe" ;;
+  *)                    BINARY_NAME="liteqsl" ;;
+esac
+BINARY="$DEPLOY_DIR/$BINARY_NAME"
+STATIC_DIR="$DEPLOY_DIR/static"
+CONFIG_FILE="$DEPLOY_DIR/config.yaml"
+CONFIG_EXAMPLE="$DEPLOY_DIR/config.example.yaml"
+DATA_DIR="$DEPLOY_DIR/data"
+
+RUN_DIR="$DEPLOY_DIR/.run"
 PID_FILE="$RUN_DIR/liteqsl.pid"
+CHILD_PID_FILE="$RUN_DIR/liteqsl.child.pid"
 STOP_FLAG="$RUN_DIR/stop.flag"
 LOG_FILE="$RUN_DIR/liteqsl.log"
 
 HOST="${LITEQSL_HOST:-0.0.0.0}"
 PORT="${LITEQSL_PORT:-8000}"
-PYTHON="${LITEQSL_PYTHON:-python3}"
-SYSTEMD_USER="${LITEQSL_USER:-$(id -un)}"
+SYSTEMD_USER="${LITEQSL_USER:-$(id -un 2>/dev/null || echo nobody)}"
 RESTART_DELAY="${LITEQSL_RESTART_DELAY:-5}"
-SERVICE_NAME="liteqsl-web"
+RELEASE_URL="${LITEQSL_RELEASE_URL:-}"
+GO_CMD="${GO:-go}"
+SERVICE_NAME="liteqsl"
 # -----------------------------------------------------------------------------
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 die() { log "错误: $*" >&2; exit 1; }
 
-ensure_runtime_dir() {
-  mkdir -p "$RUN_DIR" "$DEPLOY_DIR/data"
-}
+ensure_runtime_dir() { mkdir -p "$RUN_DIR" "$DATA_DIR"; }
 
 # 是否可用 systemd 系统级服务（需要 root 且 systemd 正在运行）
 has_systemd() {
@@ -73,9 +84,90 @@ has_systemd() {
     && [ "$(id -u)" -eq 0 ]
 }
 
-# uvicorn 启动命令（生产模式，不带 --reload，避免生成 reloader 子进程）
-uvicorn_cmd() {
-  "$VENV_DIR/bin/uvicorn" app.main:app --host "$HOST" --port "$PORT"
+# 识别平台（os arch），用于选择/下载对应二进制
+detect_platform() {
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$os" in
+    linux)  os="linux" ;;
+    darwin) os="darwin" ;;
+    mingw*|msys*|cygwin*) os="windows" ;;
+    *) die "不支持的系统: $os" ;;
+  esac
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    armv7l|armv6l) arch="arm" ;;
+    *) die "不支持的架构: $arch" ;;
+  esac
+  echo "$os $arch"
+}
+
+# ----------------------------- 准备布局 -------------------------------------
+ensure_layout() {
+  ensure_runtime_dir
+
+  [ -d "$STATIC_DIR" ] || die "缺少 static/ 目录（请在发布包根目录运行本脚本，或先放置前端资源）"
+
+  if [ ! -f "$CONFIG_FILE" ]; then
+    if [ -f "$CONFIG_EXAMPLE" ]; then
+      cp "$CONFIG_EXAMPLE" "$CONFIG_FILE"
+      log "已根据 config.example.yaml 生成 config.yaml（请按需修改）"
+    else
+      log "未找到 config.yaml / config.example.yaml，将使用内置默认配置"
+    fi
+  fi
+}
+
+# ----------------------------- 获取二进制 -----------------------------------
+# 优先级：已存在的二进制 > 从发布地址下载 > 用 Go 从源码构建
+fetch_binary() {
+  local force="${1:-0}"
+  local os arch ext url tmp
+  read -r os arch <<< "$(detect_platform)"
+  ext=""
+  [ "$os" = "windows" ] && ext=".exe"
+
+  if [ "$force" -eq 0 ] && [ -x "$BINARY" ]; then
+    log "使用已有二进制: $BINARY"
+    return 0
+  fi
+
+  if [ -n "$RELEASE_URL" ]; then
+    url="${RELEASE_URL%/}/liteqsl-${os}-${arch}${ext}"
+    tmp="${BINARY}.download"
+    log "下载二进制: $url"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fSL --retry 3 -o "$tmp" "$url" || die "下载失败: $url"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -O "$tmp" "$url" || die "下载失败: $url"
+    else
+      die "需要 curl 或 wget 才能下载二进制"
+    fi
+    chmod +x "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$BINARY"
+    log "二进制下载完成: $BINARY"
+    return 0
+  fi
+
+  # 从源码构建
+  if command -v "$GO_CMD" >/dev/null 2>&1; then
+    build_binary
+    return 0
+  fi
+
+  die "未找到可用二进制。请下载发布包，或设置 LITEQSL_RELEASE_URL，或安装 Go 后重试"
+}
+
+# 用 Go 从源码构建
+build_binary() {
+  [ -f "$DEPLOY_DIR/go.mod" ] || die "当前目录不是源码仓库，无法构建（缺少 go.mod）"
+  command -v "$GO_CMD" >/dev/null 2>&1 || die "未找到 go 命令，请安装 Go 1.26+"
+  log "使用 Go 从源码构建 ..."
+  ( cd "$DEPLOY_DIR" && CGO_ENABLED=0 "$GO_CMD" build -trimpath -ldflags "-s -w" -o "$BINARY" ./cmd/liteqsl ) \
+    || die "构建失败"
+  log "构建完成: $BINARY"
 }
 
 # ----------------------------- 停止进程 -------------------------------------
@@ -93,168 +185,108 @@ stop_process() {
   if [ -f "$PID_FILE" ]; then
     local sup_pid child
     sup_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+
+    # 先结束守护循环记录的子进程（真正的服务进程）——不依赖 pgrep，
+    # 以兼容 Git Bash / MSYS 等无法用 pgrep -P 追踪 Windows 子进程的环境。
+    if [ -f "$CHILD_PID_FILE" ]; then
+      child="$(cat "$CHILD_PID_FILE" 2>/dev/null || true)"
+      if [ -n "$child" ] && kill -0 "$child" 2>/dev/null; then
+        log "停止服务进程 (pid=$child) ..."
+        kill "$child" 2>/dev/null || true
+      fi
+    fi
+
     if [ -n "$sup_pid" ] && kill -0 "$sup_pid" 2>/dev/null; then
       log "停止守护进程 (pid=$sup_pid) ..."
-      # 写入停止标记，让守护循环退出后不再重启
       touch "$STOP_FLAG"
-      # 停止守护循环的直接子进程（uvicorn）
       if command -v pgrep >/dev/null 2>&1; then
         for child in $(pgrep -P "$sup_pid" 2>/dev/null || true); do
           kill "$child" 2>/dev/null || true
         done
       fi
-      # 等待守护循环自行退出，超时再强制结束
       local i
-      for i in {1..10}; do
+      for i in $(seq 1 10); do
         kill -0 "$sup_pid" 2>/dev/null || break
         sleep 1
       done
-      if kill -0 "$sup_pid" 2>/dev/null; then
-        kill -9 "$sup_pid" 2>/dev/null || true
-      fi
+      kill -0 "$sup_pid" 2>/dev/null && kill -9 "$sup_pid" 2>/dev/null || true
     fi
-    rm -f "$PID_FILE"
-    rm -f "$STOP_FLAG"
+    rm -f "$PID_FILE" "$CHILD_PID_FILE" "$STOP_FLAG"
+
+    # 兜底：确保没有残留的服务进程
+    stop_stray_binary
     return
   fi
 
-  # 3) 兜底：没有 pid 文件（可能是之前手动用 run.py / uvicorn 启动的）
-  if command -v pkill >/dev/null 2>&1 && pkill -f "uvicorn app\.main:app" 2>/dev/null; then
-    log "已停止手动启动的 uvicorn 进程"
-  else
+  # 3) 兜底：没有 pid 文件
+  if ! stop_stray_binary; then
     log "未发现正在运行的 $APP_NAME 进程"
   fi
   rm -f "$STOP_FLAG"
 }
 
-# ----------------------------- 更新代码 -------------------------------------
-update_code() {
-  cd "$DEPLOY_DIR" || die "无法进入目录 $DEPLOY_DIR"
-
-  # 尚未克隆仓库的情况：克隆后同步代码到当前目录
-  if [ ! -d .git ]; then
-    log "当前目录不是 git 仓库，从 $REPO_URL 克隆（$BRANCH 分支）..."
-    local tmp
-    tmp="$(mktemp -d)"
-    git clone -q -b "$BRANCH" "$REPO_URL" "$tmp" || die "克隆仓库失败，请检查网络与仓库地址"
-    if command -v rsync >/dev/null 2>&1; then
-      rsync -a \
-        --exclude='data/' --exclude='.venv/' --exclude='.run/' --exclude='.git/' \
-        "$tmp/" "$DEPLOY_DIR/" || die "同步代码失败"
-    else
-      log "未找到 rsync，使用 cp 兜底同步 ..."
-      shopt -s dotglob
-      cp -a "$tmp"/. "$DEPLOY_DIR"/ 2>/dev/null || true
-      shopt -u dotglob
+# 兜底结束仍然运行的本程序进程（按命令行匹配）
+stop_stray_binary() {
+  local killed=0
+  if command -v pkill >/dev/null 2>&1; then
+    if pkill -f "$BINARY_NAME -config" 2>/dev/null; then
+      log "已停止残留的 $BINARY_NAME 进程"
+      killed=1
     fi
-    rm -rf "$tmp"
-    # 建立本地 git 仓库，便于之后增量更新
-    git init -q
-    git remote add origin "$REPO_URL" 2>/dev/null || true
-    git fetch -q origin "$BRANCH"
-    git checkout -q -B "$BRANCH" "origin/$BRANCH" || true
-    log "代码克隆完成，当前 commit: $(git rev-parse HEAD)"
-    return
   fi
-
-  log "访问 $REPO_URL 检查 $BRANCH 分支更新 ..."
-  git fetch -q --prune --tags origin "$BRANCH" || die "git fetch 失败，请检查网络或仓库地址"
-
-  local local_head remote_head dirty
-  local_head="$(git rev-parse HEAD)"
-  remote_head="$(git rev-parse "origin/$BRANCH")"
-
-  if [ "$local_head" = "$remote_head" ]; then
-    log "代码已是最新 (commit: $local_head)"
-    return
-  fi
-
-  log "发现新代码: $local_head -> $remote_head"
-  dirty=0
-  if git status --porcelain --untracked-files=no | grep -q .; then
-    dirty=1
-  fi
-
-  if [ "$dirty" -eq 1 ]; then
-    log "检测到本地修改，先 stash 暂存再拉取 ..."
-    git stash push -m "deploy-auto-stash $(date +%s)" -q || die "git stash 失败"
-    if git pull --ff-only origin "$BRANCH" -q; then
-      log "拉取成功，恢复本地修改 ..."
-      git stash pop -q || log "警告: stash pop 冲突，请手动处理（git stash list）"
-    else
-      log "拉取失败，恢复 stash ..."
-      git stash pop -q || true
-      die "git pull 失败"
-    fi
-  else
-    git pull --ff-only origin "$BRANCH" -q || die "git pull 失败"
-  fi
-
-  log "代码更新完成，当前 commit: $(git rev-parse HEAD)"
-}
-
-# ----------------------------- 更新依赖 -------------------------------------
-update_deps() {
-  cd "$DEPLOY_DIR" || die "无法进入目录 $DEPLOY_DIR"
-
-  if [ ! -d "$VENV_DIR" ]; then
-    log "创建虚拟环境 $VENV_DIR ..."
-    "$PYTHON" -m venv "$VENV_DIR" || die "创建虚拟环境失败，请确认已安装 $PYTHON 及其 venv 模块"
-  fi
-
-  log "安装 / 更新依赖 (requirements.txt) ..."
-  "$VENV_DIR/bin/python" -m pip install --upgrade pip -q 2>/dev/null \
-    || log "警告: 升级 pip 失败（继续安装依赖）"
-  "$VENV_DIR/bin/python" -m pip install --upgrade -r requirements.txt \
-    || die "依赖安装失败"
-  log "依赖更新完成"
+  return $((1 - killed))
 }
 
 # ----------------------------- 启动进程 -------------------------------------
-start_systemd() {
+write_systemd_unit() {
   local unit="/etc/systemd/system/$SERVICE_NAME.service"
-  if [ ! -f "$unit" ]; then
-    log "写入 systemd 服务单元 $unit ..."
-    {
-      cat <<EOF
+  log "写入 systemd 服务单元 $unit ..."
+  {
+    cat <<EOF
 [Unit]
-Description=LiteQSL-Web QSO/QSL 日志与卡片管理系统
+Description=$APP_NAME v2 - 业余无线电 QSO/QSL 日志与卡片管理系统
 After=network.target
 
 [Service]
 Type=simple
 User=$SYSTEMD_USER
+Group=$SYSTEMD_USER
 WorkingDirectory=$DEPLOY_DIR
-Environment=PATH=$VENV_DIR/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=PYTHONDONTWRITEBYTECODE=1
-EOF
-      [ -n "${LITEQSL_SECRET_KEY:-}" ] && printf 'Environment=SECRET_KEY=%s\n' "$LITEQSL_SECRET_KEY"
-      cat <<EOF
-ExecStart=$VENV_DIR/bin/uvicorn app.main:app --host $HOST --port $PORT
+ExecStart=$BINARY -config $CONFIG_FILE
 Restart=always
 RestartSec=$RESTART_DELAY
+EOF
+    [ -n "${LITEQSL_SECRET_KEY:-}" ] && printf 'Environment=SECRET_KEY=%s\n' "$LITEQSL_SECRET_KEY"
+    cat <<EOF
+
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=$DEPLOY_DIR/data
+ProtectHome=true
+ReadWritePaths=$DATA_DIR
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    } > "$unit" || die "写入 systemd 单元失败"
-    systemctl daemon-reload || die "systemctl daemon-reload 失败"
-    systemctl enable "$SERVICE_NAME" -q || die "systemctl enable 失败"
-  fi
+  } > "$unit" || die "写入 systemd 单元失败"
+  systemctl daemon-reload || die "systemctl daemon-reload 失败"
+  systemctl enable "$SERVICE_NAME" -q || die "systemctl enable 失败"
+}
 
+start_systemd() {
+  local unit="/etc/systemd/system/$SERVICE_NAME.service"
+  if [ ! -f "$unit" ] || [ -n "${LITEQSL_REINSTALL_UNIT:-}" ]; then
+    write_systemd_unit
+  fi
   log "启动 systemd 服务 $SERVICE_NAME ..."
   systemctl restart "$SERVICE_NAME" || die "systemctl restart 失败"
-  log "已通过 systemd 启动，进程崩溃会自动拉起（Restart=always）"
+  log "已通过 systemd 启动（Restart=always，开机自启）"
   log "手动停止: systemctl stop $SERVICE_NAME"
 }
 
 start_supervised() {
-  rm -f "$STOP_FLAG"
-  cd "$DEPLOY_DIR"
+  rm -f "$STOP_FLAG" "$CHILD_PID_FILE"
+  cd "$DEPLOY_DIR" || die "无法进入目录 $DEPLOY_DIR"
   log "以守护循环方式启动（进程崩溃后 ${RESTART_DELAY}s 自动重启）..."
   nohup "$SCRIPT_PATH" __supervise >> "$LOG_FILE" 2>&1 &
   echo $! > "$PID_FILE"
@@ -262,26 +294,43 @@ start_supervised() {
   log "手动停止: $0 stop"
 }
 
-# 守护循环：反复拉起 uvicorn，仅当检测到停止标记时才退出
+# 守护循环：反复拉起服务，仅当检测到停止标记时才退出
 supervise_loop() {
-  cd "$DEPLOY_DIR"
-  local code=0
+  cd "$DEPLOY_DIR" || exit 1
+  local child="" code=0
+
+  # 收到 TERM/INT 时同步结束子进程，避免残留
+  cleanup() {
+    if [ -n "$child" ] && kill -0 "$child" 2>/dev/null; then
+      kill "$child" 2>/dev/null || true
+    fi
+    rm -f "$CHILD_PID_FILE"
+    exit 0
+  }
+  trap cleanup TERM INT
+
   while true; do
-    uvicorn_cmd
+    # 后台启动并把子进程 PID 写入文件，便于 stop 精确结束（兼容 Git Bash/MSYS）
+    "$BINARY" -config "$CONFIG_FILE" &
+    child=$!
+    echo "$child" > "$CHILD_PID_FILE"
+
+    wait "$child"
     code=$?
+    child=""
+
     if [ -f "$STOP_FLAG" ]; then
-      rm -f "$STOP_FLAG"
+      rm -f "$STOP_FLAG" "$CHILD_PID_FILE"
       log "收到停止标记，守护进程退出"
       exit 0
     fi
-    log "uvicorn 退出 (code=$code)，${RESTART_DELAY}s 后自动重启 ..."
+    log "$BINARY_NAME 退出 (code=$code)，${RESTART_DELAY}s 后自动重启 ..."
     sleep "$RESTART_DELAY"
   done
 }
 
 start_process() {
-  ensure_runtime_dir
-  cd "$DEPLOY_DIR"
+  ensure_layout
   if has_systemd; then
     start_systemd
   else
@@ -312,7 +361,7 @@ status() {
     if curl -fsS "http://127.0.0.1:$PORT/health" 2>/dev/null; then
       echo
     else
-      log "健康检查未通过（服务可能尚未就绪）"
+      log "健康检查未通过（服务可能尚未就绪，或端口不是 $PORT）"
     fi
   fi
 }
@@ -321,21 +370,23 @@ usage() {
   cat <<EOF
 用法: $0 [命令]
 
-  不带参数 / deploy   一键部署：停止 -> 拉取更新 -> 更新依赖 -> 启动
+  不带参数 / deploy   一键部署：停止 -> 取二进制 -> 准备布局 -> 启动
   start               停止旧进程并启动
   stop                停止服务
   restart             重启服务
-  update              仅拉取更新并更新依赖
-  status              查看运行状态
+  update              更新二进制（下载/构建）并重启
+  build               仅用 Go 从源码构建二进制
+  status              查看运行状态与健康检查
+  install-service     仅安装 systemd 服务
 
 环境变量:
-  LITEQSL_HOST          监听地址          (默认 0.0.0.0)
-  LITEQSL_PORT          监听端口          (默认 8000)
-  LITEQSL_PYTHON        Python 命令       (默认 python3)
-  LITEQSL_BRANCH        分支              (默认 main)
-  LITEQSL_USER          systemd 运行用户  (默认当前用户)
-  LITEQSL_SECRET_KEY    生产 Session 密钥
-  LITEQSL_RESTART_DELAY 崩溃后重启延迟秒数(默认 5)
+  LITEQSL_RELEASE_URL   发布下载基地址（设置后优先下载二进制）
+  LITEQSL_HOST          监听地址（默认 0.0.0.0）
+  LITEQSL_PORT          监听端口（默认 8000）
+  LITEQSL_USER          systemd 运行用户（默认当前用户）
+  LITEQSL_SECRET_KEY    会话密钥
+  LITEQSL_RESTART_DELAY 崩溃后重启延迟秒数（默认 5）
+  GO                    go 命令（默认 go）
 EOF
 }
 
@@ -345,6 +396,7 @@ main() {
     __supervise) supervise_loop ;;
     start)
       stop_process
+      fetch_binary 0
       start_process
       ;;
     stop)
@@ -352,27 +404,41 @@ main() {
       ;;
     restart)
       stop_process
+      fetch_binary 0
       start_process
       ;;
     update)
-      update_code
-      update_deps
+      stop_process
+      fetch_binary 1
+      start_process
+      ;;
+    build)
+      build_binary
       ;;
     status)
       status
       ;;
+    install-service)
+      ensure_layout
+      has_systemd || die "当前环境不可用 systemd（需 root 且 systemd 正在运行）"
+      write_systemd_unit
+      log "systemd 服务已安装。启动: systemctl start $SERVICE_NAME"
+      ;;
     "" | deploy)
       log "===== 步骤 1/4: 停止现有进程 ====="
       stop_process
-      log "===== 步骤 2/4: 检查并更新代码 ====="
-      update_code
-      log "===== 步骤 3/4: 更新依赖 ====="
-      update_deps
+      log "===== 步骤 2/4: 准备二进制 ====="
+      fetch_binary 0
+      log "===== 步骤 3/4: 准备运行布局 ====="
+      ensure_layout
       log "===== 步骤 4/4: 启动进程 ====="
       start_process
       log "===== 部署完成 ====="
       sleep 1
       status
+      ;;
+    help | -h | --help)
+      usage
       ;;
     *)
       usage
