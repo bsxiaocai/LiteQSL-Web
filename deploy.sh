@@ -4,7 +4,7 @@
 #
 # 不带参数执行会依次完成：
 #   1. 停止现有 LiteQSL-Web 进程
-#   2. 准备二进制（本地已有则直接用；否则从发布地址下载；再否则用 Go 从源码构建）
+#   2. 准备程序（本地已有则直接用；否则从 Releases 下载发布包；再否则用 Go 从源码构建）
 #   3. 准备运行布局（static/、config.yaml、data/）
 #   4. 启动服务，并保证“除非人为停止，否则不会停止”
 #
@@ -13,17 +13,17 @@
 #   - 其它情况（普通用户 / 容器）：守护循环后台运行，崩溃自动重启
 #
 # 常用命令：
-#   ./deploy.sh                  一键部署（停止 -> 取二进制 -> 准备布局 -> 启动）
+#   ./deploy.sh                  一键部署（停止 -> 获取程序 -> 准备布局 -> 启动）
 #   ./deploy.sh start            停止旧进程并启动
 #   ./deploy.sh stop             停止服务
 #   ./deploy.sh restart          重启服务
-#   ./deploy.sh update           仅更新二进制（下载/构建）并重启
+#   ./deploy.sh update           仅更新程序（下载/构建）并重启
 #   ./deploy.sh build            仅用 Go 从源码构建二进制
 #   ./deploy.sh status           查看运行状态与健康检查
 #   ./deploy.sh install-service  仅安装 systemd 服务
 #
 # 可选环境变量：
-#   LITEQSL_RELEASE_URL   发布下载基地址（默认空；设置后优先下载二进制）
+#   LITEQSL_RELEASE_URL   发布下载基地址（默认指向本仓库 Releases 最新版，直接下载发布包）
 #                         例: https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download
 #   LITEQSL_HOST          监听地址（写入 config.yaml 时的默认值，默认 0.0.0.0）
 #   LITEQSL_PORT          监听端口（默认 8000）
@@ -67,7 +67,7 @@ HOST="${LITEQSL_HOST:-0.0.0.0}"
 PORT="${LITEQSL_PORT:-8000}"
 SYSTEMD_USER="${LITEQSL_USER:-$(id -un 2>/dev/null || echo nobody)}"
 RESTART_DELAY="${LITEQSL_RESTART_DELAY:-5}"
-RELEASE_URL="${LITEQSL_RELEASE_URL:-}"
+RELEASE_URL="${LITEQSL_RELEASE_URL:-https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download}"
 GO_CMD="${GO:-go}"
 SERVICE_NAME="liteqsl"
 # -----------------------------------------------------------------------------
@@ -120,11 +120,11 @@ ensure_layout() {
   fi
 }
 
-# ----------------------------- 获取二进制 -----------------------------------
-# 优先级：已存在的二进制 > 从发布地址下载 > 用 Go 从源码构建
+# ----------------------------- 获取程序 -------------------------------------
+# 优先级：已存在的二进制 > 从发布地址下载发布包并解压 > 用 Go 从源码构建
 fetch_binary() {
   local force="${1:-0}"
-  local os arch ext url tmp
+  local os arch ext pkg url tmpdir
   read -r os arch <<< "$(detect_platform)"
   ext=""
   [ "$os" = "windows" ] && ext=".exe"
@@ -135,19 +135,40 @@ fetch_binary() {
   fi
 
   if [ -n "$RELEASE_URL" ]; then
-    url="${RELEASE_URL%/}/liteqsl-${os}-${arch}${ext}"
-    tmp="${BINARY}.download"
-    log "下载二进制: $url"
+    # 发布包内同时包含二进制与 static/，因此下载压缩包而非裸二进制
+    pkg="liteqsl-${os}-${arch}.tar.gz"
+    url="${RELEASE_URL%/}/${pkg}"
+    tmpdir="$(mktemp -d)"
+    log "下载发布包: $url"
     if command -v curl >/dev/null 2>&1; then
-      curl -fSL --retry 3 -o "$tmp" "$url" || die "下载失败: $url"
+      curl -fSL --retry 3 -o "$tmpdir/$pkg" "$url" || { rm -rf "$tmpdir"; die "下载失败: $url"; }
     elif command -v wget >/dev/null 2>&1; then
-      wget -O "$tmp" "$url" || die "下载失败: $url"
+      wget -O "$tmpdir/$pkg" "$url" || { rm -rf "$tmpdir"; die "下载失败: $url"; }
     else
-      die "需要 curl 或 wget 才能下载二进制"
+      rm -rf "$tmpdir"
+      die "需要 curl 或 wget 才能下载发布包"
     fi
-    chmod +x "$tmp" 2>/dev/null || true
-    mv -f "$tmp" "$BINARY"
-    log "二进制下载完成: $BINARY"
+
+    log "解压发布包 ..."
+    mkdir -p "$tmpdir/extract"
+    tar -xzf "$tmpdir/$pkg" -C "$tmpdir/extract" || { rm -rf "$tmpdir"; die "解压失败: $pkg"; }
+    [ -f "$tmpdir/extract/liteqsl${ext}" ] || { rm -rf "$tmpdir"; die "发布包内容异常，未找到 liteqsl${ext}"; }
+
+    # 安装二进制与前端资源（覆盖旧版本）；其余文件仅在缺失时补齐，避免覆盖用户配置
+    cp -f "$tmpdir/extract/liteqsl${ext}" "$BINARY"
+    chmod +x "$BINARY" 2>/dev/null || true
+    if [ -d "$tmpdir/extract/static" ]; then
+      rm -rf "$STATIC_DIR"
+      cp -r "$tmpdir/extract/static" "$STATIC_DIR"
+    fi
+    [ -f "$CONFIG_EXAMPLE" ] || cp -f "$tmpdir/extract/config.example.yaml" "$CONFIG_EXAMPLE" 2>/dev/null || true
+    [ -f "$DEPLOY_DIR/deploy.sh" ] || cp -f "$tmpdir/extract/deploy.sh" "$DEPLOY_DIR/deploy.sh" 2>/dev/null || true
+    if [ ! -d "$DEPLOY_DIR/deploy" ] && [ -d "$tmpdir/extract/deploy" ]; then
+      cp -r "$tmpdir/extract/deploy" "$DEPLOY_DIR/deploy"
+    fi
+    rm -rf "$tmpdir"
+
+    log "已安装: $BINARY（含 static/）"
     return 0
   fi
 
@@ -157,7 +178,7 @@ fetch_binary() {
     return 0
   fi
 
-  die "未找到可用二进制。请下载发布包，或设置 LITEQSL_RELEASE_URL，或安装 Go 后重试"
+  die "未找到可用程序。请设置 LITEQSL_RELEASE_URL 下载发布包，或安装 Go 后从源码构建"
 }
 
 # 用 Go 从源码构建
@@ -370,17 +391,17 @@ usage() {
   cat <<EOF
 用法: $0 [命令]
 
-  不带参数 / deploy   一键部署：停止 -> 取二进制 -> 准备布局 -> 启动
+  不带参数 / deploy   一键部署：停止 -> 获取程序 -> 准备布局 -> 启动
   start               停止旧进程并启动
   stop                停止服务
   restart             重启服务
-  update              更新二进制（下载/构建）并重启
+  update              更新程序（下载/构建）并重启
   build               仅用 Go 从源码构建二进制
   status              查看运行状态与健康检查
   install-service     仅安装 systemd 服务
 
 环境变量:
-  LITEQSL_RELEASE_URL   发布下载基地址（设置后优先下载二进制）
+  LITEQSL_RELEASE_URL   发布下载基地址（默认本仓库 Releases 最新版）
   LITEQSL_HOST          监听地址（默认 0.0.0.0）
   LITEQSL_PORT          监听端口（默认 8000）
   LITEQSL_USER          systemd 运行用户（默认当前用户）
@@ -427,7 +448,7 @@ main() {
     "" | deploy)
       log "===== 步骤 1/4: 停止现有进程 ====="
       stop_process
-      log "===== 步骤 2/4: 准备二进制 ====="
+      log "===== 步骤 2/4: 准备程序 ====="
       fetch_binary 0
       log "===== 步骤 3/4: 准备运行布局 ====="
       ensure_layout

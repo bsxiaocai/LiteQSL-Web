@@ -95,9 +95,11 @@ liteqsl/                 # 部署目录（任意路径）
 ### Linux 本地部署
 
 ```bash
-# 1) 解压并进入部署目录
+# 1) 下载最新版本并解压（Linux amd64）
 mkdir -p ~/liteqsl
-tar -xzf liteqsl-2.0.0-linux-amd64.tar.gz -C ~/liteqsl
+curl -fSL -o /tmp/liteqsl.tar.gz \
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-amd64.tar.gz
+tar -xzf /tmp/liteqsl.tar.gz -C ~/liteqsl
 cd ~/liteqsl
 
 # 2) 赋予执行权限
@@ -268,22 +270,36 @@ data/
 
 **方式 A：下载发布包（推荐，服务器无需安装 Go）**
 
-从 Releases 页面下载对应平台的压缩包：
+直接从 Releases 下载。资产名**不含版本号**，因此 `latest` 地址始终指向最新版本：
 
-| 平台 | 架构 | 文件 |
-|------|------|------|
-| Linux | amd64 (x86_64) | `liteqsl-<版本>-linux-amd64.tar.gz` |
-| Linux | arm64 (aarch64) | `liteqsl-<版本>-linux-arm64.tar.gz` |
-| Linux | arm (armv7) | `liteqsl-<版本>-linux-arm.tar.gz` |
-| Windows | amd64 | `liteqsl-<版本>-windows-amd64.tar.gz` |
+| 平台 | 架构 | 资产名 |
+|------|------|--------|
+| Linux | amd64 (x86_64) | `liteqsl-linux-amd64.tar.gz` |
+| Linux | arm64 (aarch64) | `liteqsl-linux-arm64.tar.gz` |
+| Linux | arm (armv7) | `liteqsl-linux-arm.tar.gz` |
+| Windows | amd64 | `liteqsl-windows-amd64.tar.gz` |
+| macOS | amd64 (Intel) | `liteqsl-darwin-amd64.tar.gz` |
+| macOS | arm64 (Apple Silicon) | `liteqsl-darwin-arm64.tar.gz` |
 
 ```bash
-# 以 Linux amd64 为例
+# Linux amd64：下载最新版本并解压到 /opt/liteqsl
 mkdir -p /opt/liteqsl
-tar -xzf liteqsl-2.0.0-linux-amd64.tar.gz -C /opt/liteqsl
+curl -fSL -o /tmp/liteqsl.tar.gz \
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-amd64.tar.gz
+tar -xzf /tmp/liteqsl.tar.gz -C /opt/liteqsl
 cd /opt/liteqsl
 chmod +x liteqsl deploy.sh
 ```
+
+需要**固定某个版本**时，把 `latest/download` 换成 `download/<标签>` 即可：
+
+```bash
+curl -fSL -o /tmp/liteqsl.tar.gz \
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/download/v2.0.0/liteqsl-linux-amd64.tar.gz
+```
+
+> Windows 用户把资产名换成 `liteqsl-windows-amd64.tar.gz`，解压后即得 `liteqsl.exe`。
+> 也可以直接使用 `deploy.sh`（默认就从上述地址下载）：`./deploy.sh`（见第 4 步）。
 
 **方式 B：从源码构建（可选）**
 
@@ -304,10 +320,12 @@ CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o liteqsl ./cmd/liteqsl
 ./scripts/build-release.sh 2.0.1      # 或指定版本号
 ```
 
-产物位于 `dist/`：
+产物位于 `dist/`（资产名**不含版本号**，便于 `releases/latest/download/<名称>` 稳定下载）：
 
-- `liteqsl-<os>-<arch>[.exe]` —— 纯二进制
-- `liteqsl-<version>-<os>-<arch>.tar.gz` —— 发布包（含 `static/`、配置示例、部署脚本与文档）
+- `liteqsl-<os>-<arch>.tar.gz` —— 发布包（含二进制、`static/`、配置示例、部署脚本与文档）
+- `SHA256SUMS` —— 发布包校验和清单
+
+发布时将 `dist/*.tar.gz` 与 `SHA256SUMS` 作为 Release 附件上传即可。
 
 构建后自检（可选）：
 
@@ -368,10 +386,19 @@ chmod +x deploy.sh
 | root 且存在 systemd | 安装为 `liteqsl` systemd 服务 | `Restart=always`，开机自启 |
 | 普通用户 / 容器 | 守护循环后台运行 | 崩溃自动重启，`./deploy.sh stop` 停止 |
 
-设置 `LITEQSL_RELEASE_URL` 后，脚本会优先从发布地址下载对应平台二进制（无需在服务器上安装 Go）：
+`deploy.sh` 默认从本仓库 Releases 下载对应平台的**发布包**（含 `static/`），服务器无需安装 Go：
 
 ```bash
-LITEQSL_RELEASE_URL="https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download" ./deploy.sh
+./deploy.sh            # 停止 -> 获取程序（本地已有则直接用，否则下载发布包）-> 启动
+./deploy.sh update     # 强制重新下载最新发布包并重启
+./deploy.sh build      # 改为用 Go 从源码构建
+```
+
+优先级为：**本地已有 `liteqsl` → 从 Releases 下载 → 用 Go 构建**。
+使用自建/镜像发布源时覆盖默认地址即可：
+
+```bash
+LITEQSL_RELEASE_URL="https://github.com/<你的仓库>/releases/latest/download" ./deploy.sh
 ```
 
 **方式 B：systemd（手动安装）**

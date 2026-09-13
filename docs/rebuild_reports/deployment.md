@@ -25,21 +25,34 @@ liteqsl/                     # 部署目录（任意路径）
 
 ## 2. 平台与下载
 
-| 平台 | 架构 | 文件 |
-|------|------|------|
-| Linux | amd64 (x86_64) | `liteqsl-linux-amd64` |
-| Linux | arm64 (aarch64) | `liteqsl-linux-arm64` |
-| Linux | arm (armv7) | `liteqsl-linux-arm` |
-| Windows | amd64 | `liteqsl-windows-amd64.exe` |
-| macOS | amd64 (Intel) | `liteqsl-darwin-amd64` |
-| macOS | arm64 (Apple Silicon) | `liteqsl-darwin-arm64` |
+| 平台 | 架构 | 资产名 |
+|------|------|--------|
+| Linux | amd64 (x86_64) | `liteqsl-linux-amd64.tar.gz` |
+| Linux | arm64 (aarch64) | `liteqsl-linux-arm64.tar.gz` |
+| Linux | arm (armv7) | `liteqsl-linux-arm.tar.gz` |
+| Windows | amd64 | `liteqsl-windows-amd64.tar.gz` |
+| macOS | amd64 (Intel) | `liteqsl-darwin-amd64.tar.gz` |
+| macOS | arm64 (Apple Silicon) | `liteqsl-darwin-arm64.tar.gz` |
 
-发布包 `liteqsl-<version>-<os>-<arch>.tar.gz` 内含二进制、`static/`、配置示例、部署脚本与文档。
+资产名**不含版本号**，因此 `releases/latest/download/<资产名>` 始终指向最新版本；
+发布包内含二进制、`static/`、配置示例、部署脚本与文档，下载即完整可运行。
 
 ```bash
-tar -xzf liteqsl-2.0.0-linux-amd64.tar.gz -C /opt/liteqsl
+# 下载最新版本（以 Linux amd64 为例）
+mkdir -p /opt/liteqsl
+curl -fSL -o /tmp/liteqsl.tar.gz \
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-amd64.tar.gz
+tar -xzf /tmp/liteqsl.tar.gz -C /opt/liteqsl
 cd /opt/liteqsl
 chmod +x liteqsl deploy.sh
+```
+
+固定版本时把 `latest/download` 换成 `download/<标签>`（如 `download/v2.0.0`）。
+也可以直接交由 `deploy.sh` 完成下载与安装：
+
+```bash
+./deploy.sh              # 默认从本仓库 Releases 下载对应平台发布包
+./deploy.sh update       # 重新下载最新发布包并重启
 ```
 
 ---

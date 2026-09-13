@@ -75,16 +75,19 @@ CSV 导出与 v1.x **字节级一致**，ADIF 导出归一化后一致。
 
 ## 📦 下载
 
-| 平台 | 架构 | 发布包 |
-|------|------|--------|
-| Linux | amd64 (x86_64) | `liteqsl-2.0.0-linux-amd64.tar.gz` |
-| Linux | arm64 (aarch64) | `liteqsl-2.0.0-linux-arm64.tar.gz` |
-| Linux | arm (armv7) | `liteqsl-2.0.0-linux-arm.tar.gz` |
-| Windows | amd64 | `liteqsl-2.0.0-windows-amd64.tar.gz` |
-| macOS | amd64 (Intel) | `liteqsl-2.0.0-darwin-amd64.tar.gz` |
-| macOS | arm64 (Apple Silicon) | `liteqsl-2.0.0-darwin-arm64.tar.gz` |
+| 平台 | 架构 | 资产名 | 直连下载 |
+|------|------|--------|----------|
+| Linux | amd64 (x86_64) | `liteqsl-linux-amd64.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-amd64.tar.gz) |
+| Linux | arm64 (aarch64) | `liteqsl-linux-arm64.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-arm64.tar.gz) |
+| Linux | arm (armv7) | `liteqsl-linux-arm.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-arm.tar.gz) |
+| Windows | amd64 | `liteqsl-windows-amd64.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-windows-amd64.tar.gz) |
+| macOS | amd64 (Intel) | `liteqsl-darwin-amd64.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-darwin-amd64.tar.gz) |
+| macOS | arm64 (Apple Silicon) | `liteqsl-darwin-arm64.tar.gz` | [latest](https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-darwin-arm64.tar.gz) |
 
-每个发布包内含：
+> 资产名**不含版本号**，因此 `releases/latest/download/<资产名>` 始终指向最新版本，可直接用于部署脚本；
+> 需要固定版本时改用 `releases/download/v2.0.0/<资产名>`。
+
+每个发布包内含（下载即完整可运行，无需额外文件）：
 
 ```text
 liteqsl                 可执行文件（Windows 为 liteqsl.exe）
@@ -100,11 +103,13 @@ README.md
 
 ## 🚀 快速开始
 
-### Linux
+### Linux（一条命令下载并运行）
 
 ```bash
 mkdir -p /opt/liteqsl
-tar -xzf liteqsl-2.0.0-linux-amd64.tar.gz -C /opt/liteqsl
+curl -fSL -o /tmp/liteqsl.tar.gz \
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-linux-amd64.tar.gz
+tar -xzf /tmp/liteqsl.tar.gz -C /opt/liteqsl
 cd /opt/liteqsl
 chmod +x liteqsl deploy.sh
 
@@ -112,10 +117,17 @@ cp config.example.yaml config.yaml   # 可选，不创建则用内置默认值
 ./liteqsl                            # 默认监听 0.0.0.0:8000
 ```
 
+> 其他架构把资产名换成 `liteqsl-linux-arm64.tar.gz` / `liteqsl-linux-arm.tar.gz` 即可；
+> 需要固定版本时把 `latest/download` 换成 `download/v2.0.0`。
+
 ### Windows
 
 ```powershell
-# 解压到任意目录后，进入该目录
+# 下载并解压（PowerShell 内置 curl）
+curl.exe -fSL -o "$env:TEMP\liteqsl.tar.gz" `
+  https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download/liteqsl-windows-amd64.tar.gz
+mkdir D:\liteqsl
+tar -xzf "$env:TEMP\liteqsl.tar.gz" -C D:\liteqsl
 cd D:\liteqsl
 .\liteqsl.exe
 ```
@@ -125,11 +137,11 @@ cd D:\liteqsl
 **初始账号**：用户名 `admin`，密码 `Admin123!`
 > 首次登录会**强制要求修改用户名和密码**（新密码需至少 8 位，且包含大写字母、小写字母、数字、符号中至少三类）。
 
-需要后台常驻 / 开机自启时：
+需要后台常驻 / 开机自启时（`deploy.sh` 默认就从本仓库 Releases 下载发布包）：
 
 ```bash
-./deploy.sh                                          # 一键部署（systemd 或守护循环）
-LITEQSL_RELEASE_URL="https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download" ./deploy.sh update
+./deploy.sh            # 一键部署（自动下载发布包，systemd 或守护循环常驻）
+./deploy.sh update     # 重新下载最新发布包并重启
 ```
 
 ---
@@ -146,15 +158,15 @@ sha256sum -c SHA256SUMS
 <summary>点击展开当前发布包的校验和</summary>
 
 ```text
-a8796868308916712674c902e78123868b244acffb665c4bdd83ff52c4acfdb1  liteqsl-2.0.0-darwin-amd64.tar.gz
-dd5474ed3cac3a585644eac48bcb5ce3b45b492f25f389109aa0999fdc9118ba  liteqsl-2.0.0-darwin-arm64.tar.gz
-b575c1f9acd4b4f8e92c75d6e2b1a3789c6681a6badbf774c6b1cce92d717e26  liteqsl-2.0.0-linux-amd64.tar.gz
-63ab1576d078ff228b994029182cfd4d9eb370ee46ebe307de03a20c26054096  liteqsl-2.0.0-linux-arm.tar.gz
-51558de6ff2cdc7163cf03a33385fc026ffc4c5ed14b8007f11a62a6eb01d5b4  liteqsl-2.0.0-linux-arm64.tar.gz
-70dae5974868c0c2b4ca6a37f3860097e527a2f3e60d20312f456c686e32629e  liteqsl-2.0.0-windows-amd64.tar.gz
+a03a5ede0d5915848fcd2b8bd90f04d15683c587cd526df855a24cbe8b555a8a *liteqsl-darwin-amd64.tar.gz
+c841f28821f3db0a235a7a29ae3a280f1f04c76a928c8f25eb3d2ff2e1157df8 *liteqsl-darwin-arm64.tar.gz
+af45ae7bc78264497d93d07baff1ee4e42526feb9a7a8b0bfb577d11e0b8eb85 *liteqsl-linux-amd64.tar.gz
+9742bb4640224c8926996d654d5fbfcfc8a2d9d3d09cc1a2e4777ca3418552c3 *liteqsl-linux-arm.tar.gz
+8c13d80c0ebb5e717cd464724202ee0ee8af707db59cdae634977197d68c98da *liteqsl-linux-arm64.tar.gz
+d5bf3948a2e3d5a3e76d3b76414411b6a2325e047d8f599b169b1c9b8ef23502 *liteqsl-windows-amd64.tar.gz
 ```
 
-> 若重新执行 `./scripts/build-release.sh` 再次构建，压缩包校验和会变化，请以随包附带的 `SHA256SUMS` 为准。
+> 重新执行 `./scripts/build-release.sh` 会改变压缩包校验和，届时请以随包附带的 `SHA256SUMS` 为准。
 
 </details>
 

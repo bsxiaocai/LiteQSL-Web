@@ -6,9 +6,13 @@
 #   ./scripts/build-release.sh            # 版本号自动从 internal/version/version.go 读取
 #   ./scripts/build-release.sh 2.0.1      # 指定版本号
 #
-# 产物:
-#   dist/liteqsl-<os>-<arch>[.exe]                    纯二进制
-#   dist/liteqsl-<version>-<os>-<arch>.tar.gz         发布包（含二进制/static/配置/部署文件）
+# 产物（dist/）:
+#   liteqsl-<os>-<arch>.tar.gz   发布包（二进制 + static/ + 配置示例 + 部署文件 + 文档）
+#   SHA256SUMS                   发布包校验和清单
+#
+# 说明:
+#   资产名不带版本号，便于通过 releases/latest/download/<名称> 稳定下载；
+#   版本号由 Release 标签体现。发布时将 dist/*.tar.gz 与 SHA256SUMS 作为附件上传。
 #
 # 依赖: Go 1.26+（CGO_ENABLED=0，纯 Go SQLite，无需 C 工具链）
 # =============================================================================
@@ -51,7 +55,6 @@ for entry in "${PLATFORMS[@]}"; do
   ext=""
   [ "$os" = "windows" ] && ext=".exe"
 
-  out="$DIST/liteqsl-${os}-${arch}${ext}"
   export GOOS="$os" GOARCH="$arch"
   if [ -n "$arm" ]; then
     export GOARM="$arm"
@@ -60,23 +63,26 @@ for entry in "${PLATFORMS[@]}"; do
   fi
 
   log "构建 ${os}/${arch}${arm:+ (GOARM=$arm)} ..."
-  "$GO" build -trimpath -ldflags "-s -w" -o "$out" ./cmd/liteqsl
 
-  # 打包发布包
-  pkgdir="$DIST/pkg-${os}-${arch}"
-  mkdir -p "$pkgdir"
-  cp "$out" "$pkgdir/liteqsl${ext}"
+  # 组装发布包：二进制 + 前端 + 配置示例 + 部署文件 + 文档
+  pkgdir="$DIST/.pkg-${os}-${arch}"
+  rm -rf "$pkgdir"
+  mkdir -p "$pkgdir/docs"
+  "$GO" build -trimpath -ldflags "-s -w" -o "$pkgdir/liteqsl${ext}" ./cmd/liteqsl
   cp -r "$ROOT/static" "$pkgdir/static"
   cp "$ROOT/config.example.yaml" "$pkgdir/config.example.yaml"
   cp "$ROOT/deploy.sh" "$pkgdir/deploy.sh"
   cp -r "$ROOT/deploy" "$pkgdir/deploy"
   cp "$ROOT/README.md" "$pkgdir/README.md"
-  mkdir -p "$pkgdir/docs"
   cp "$ROOT/docs/rebuild_reports/deployment.md" "$pkgdir/docs/" 2>/dev/null || true
   cp "$ROOT/docs/rebuild_reports/api-compatibility.md" "$pkgdir/docs/" 2>/dev/null || true
-  cp "$ROOT/docs/v2.0.0-changelog.md" "$pkgdir/docs/" 2>/dev/null || true
+  cp "$ROOT/docs/"v*-changelog.md "$pkgdir/docs/" 2>/dev/null || true
+  # 注意：发布说明 release-notes-v*.md 不打包进压缩包 —— 它属于 Release 页面附件，
+  # 且其中列有压缩包校验和；若打包会产生「改校验和 → 改包 → 校验和再变」的循环依赖。
 
-  ( cd "$DIST" && tar -czf "liteqsl-${VERSION}-${os}-${arch}.tar.gz" -C "$pkgdir" . )
+  # 资产名不带版本号，便于 releases/latest/download/<名称> 稳定下载；
+  # 版本号由 Release 标签体现（包内文档亦含版本信息）。
+  ( cd "$DIST" && tar -czf "liteqsl-${os}-${arch}.tar.gz" -C "$pkgdir" . )
   rm -rf "$pkgdir"
 done
 
