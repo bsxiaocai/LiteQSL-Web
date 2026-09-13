@@ -90,7 +90,7 @@ liteqsl/                 # 部署目录（任意路径）
     └── liteqsl.service  # systemd 单元
 ```
 
-> 也可以自行从源码构建，见「构建」章节。
+> 也可以自行从源码构建，见「服务器部署 → 2. 获取程序」。
 
 ### Linux 本地部署
 
@@ -251,9 +251,99 @@ data/
 
 ## 服务器部署
 
-> 本地运行（个人电脑 / 内网）见上文「本地部署」；本节面向需要**后台常驻、开机自启**的服务器部署。
+> 本地运行（个人电脑 / 内网）见上文「本地部署」；本节面向需要**后台常驻、开机自启**的服务器。
+> 以下从零开始按顺序执行即可，服务器**无需 Python / pip / 任何运行时**。
 
-### 一键部署脚本（Linux）
+### 1. 准备
+
+| 项目 | 要求 |
+|------|------|
+| 操作系统 | Linux（amd64 / arm64 / armv7）、Windows（amd64） |
+| 运行依赖 | **无**（单个可执行文件 + `static/` 目录） |
+| 构建依赖 | 仅「从源码构建」时需要 **Go 1.26+** |
+| 磁盘占用 | 约 50 MB |
+| 监听端口 | 默认 `8000`（见「配置说明」） |
+
+### 2. 获取程序
+
+**方式 A：下载发布包（推荐，服务器无需安装 Go）**
+
+从 Releases 页面下载对应平台的压缩包：
+
+| 平台 | 架构 | 文件 |
+|------|------|------|
+| Linux | amd64 (x86_64) | `liteqsl-<版本>-linux-amd64.tar.gz` |
+| Linux | arm64 (aarch64) | `liteqsl-<版本>-linux-arm64.tar.gz` |
+| Linux | arm (armv7) | `liteqsl-<版本>-linux-arm.tar.gz` |
+| Windows | amd64 | `liteqsl-<版本>-windows-amd64.tar.gz` |
+
+```bash
+# 以 Linux amd64 为例
+mkdir -p /opt/liteqsl
+tar -xzf liteqsl-2.0.0-linux-amd64.tar.gz -C /opt/liteqsl
+cd /opt/liteqsl
+chmod +x liteqsl deploy.sh
+```
+
+**方式 B：从源码构建（可选）**
+
+需要 **Go 1.26+**（`CGO_ENABLED=0`，纯 Go SQLite 驱动，无需 C 工具链）：
+
+```bash
+git clone https://github.com/bsxiaocai/LiteQSL-Web.git
+cd LiteQSL-Web
+
+# 构建当前平台二进制
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o liteqsl ./cmd/liteqsl
+```
+
+需要一次性产出**全部平台**的二进制与发布包时：
+
+```bash
+./scripts/build-release.sh            # 版本号自动读取 internal/version/version.go
+./scripts/build-release.sh 2.0.1      # 或指定版本号
+```
+
+产物位于 `dist/`：
+
+- `liteqsl-<os>-<arch>[.exe]` —— 纯二进制
+- `liteqsl-<version>-<os>-<arch>.tar.gz` —— 发布包（含 `static/`、配置示例、部署脚本与文档）
+
+构建后自检（可选）：
+
+```bash
+go vet ./...
+go test ./...     # 单元测试 + API 集成测试
+```
+
+> CI（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）会在 push / PR 时自动运行
+> `go vet`、`go test`，并对 6 个平台做交叉编译验证。
+
+### 3. 放置文件与配置
+
+`static/` **必须**与可执行文件同级；`data/` 于首次启动时自动创建：
+
+```text
+/opt/liteqsl/
+├── liteqsl          # 可执行文件（Windows: liteqsl.exe）
+├── static/          # 前端资源
+├── config.yaml      # 配置（可从 config.example.yaml 复制）
+└── data/            # 运行时数据：qsl.db、.secret_key、backups/
+```
+
+```bash
+cp config.example.yaml config.yaml
+vi config.yaml       # 按需修改监听地址、端口、数据库路径等
+
+# 生产环境建议固定会话密钥（否则自动生成到 data/.secret_key）
+export SECRET_KEY="$(openssl rand -hex 32)"
+```
+
+配置项与默认值见上文「配置说明」，数据目录说明见「数据目录」。
+
+### 4. 启动
+
+**方式 A：一键部署脚本（Linux，推荐）**
 
 仓库根目录的 `deploy.sh` 会自动完成「停止旧进程 → 准备二进制 → 准备运行布局 → 启动服务」：
 
@@ -284,9 +374,9 @@ chmod +x deploy.sh
 LITEQSL_RELEASE_URL="https://github.com/bsxiaocai/LiteQSL-Web/releases/latest/download" ./deploy.sh
 ```
 
-### systemd（手动安装）
+**方式 B：systemd（手动安装）**
 
-参考 `deploy/liteqsl.service`：
+参考 [`deploy/liteqsl.service`](deploy/liteqsl.service)：
 
 ```bash
 sudo cp deploy/liteqsl.service /etc/systemd/system/liteqsl.service
@@ -296,7 +386,7 @@ sudo systemctl enable --now liteqsl
 sudo systemctl status liteqsl
 ```
 
-### Windows（注册为服务）
+**方式 C：Windows 注册为服务**
 
 直接运行方式见「本地部署 → Windows 本地部署」。如需注册为开机自启的服务，可用
 `sc.exe` 或 [NSSM](https://nssm.cc/) 包装：
@@ -310,7 +400,17 @@ nssm start liteqsl
 
 或在「任务计划程序」中创建「计算机启动时」触发的任务。
 
-### 反向代理（Nginx）
+### 5. 验证
+
+```bash
+curl http://127.0.0.1:8000/health
+# {"status":"ok","version":"2.0.0"}
+```
+
+浏览器访问 `http://<服务器IP>:8000/admin`，用初始账号 `admin` / `Admin123!` 登录，
+并按提示完成首次凭据修改（见「本地部署 → 初始账号与首次登录」）。
+
+### 6. 反向代理与 HTTPS
 
 ```nginx
 server {
@@ -328,7 +428,11 @@ server {
 }
 ```
 
-启用反向代理来源地址解析时需设置 `TRUST_PROXY=true`。公网部署应同时启用 HTTPS。
+启用反向代理来源地址解析时需设置 `TRUST_PROXY=true`；公网部署应同时启用 HTTPS，
+并在 `config.yaml` 中设置 `https_only: true`（让会话 Cookie 带上 `Secure` 属性）。
+
+> 更完整的部署说明（数据目录、升级、备份恢复、故障排查、从 v1.x 迁移）见
+> [`docs/rebuild_reports/deployment.md`](docs/rebuild_reports/deployment.md)。
 
 ---
 
@@ -360,7 +464,7 @@ v2 与 Python 版使用**完全相同的数据库结构**，迁移步骤：
 
 > v2 仓库**不再包含 Python 源码**。v1.x 的代码、部署脚本与文档可从 Git 历史的 v1.x 提交/标签中取得；
 > 如需回滚，换回 v1.x 的代码与启动方式即可（数据库可直接复用）。
-> 各版本变更记录见 [`doc/`](doc/)（含 [`v2.0.0-changelog.md`](doc/v2.0.0-changelog.md)）。
+> 各版本变更记录见 [`docs/`](docs/)（含 [`v2.0.0-changelog.md`](docs/v2.0.0-changelog.md)）。
 
 ---
 
@@ -383,65 +487,54 @@ v2 与 Python 版使用**完全相同的数据库结构**，迁移步骤：
 ADIF/CSV 导入导出、系统设置、数据统计、数据库备份与恢复。
 
 完整的兼容性对照（前端调用 → 后端端点 → 与 Python 版比对结果）见
-[`docs/api-compatibility.md`](docs/api-compatibility.md)。
+[`docs/rebuild_reports/api-compatibility.md`](docs/rebuild_reports/api-compatibility.md)。
 
 ---
-
-## 构建
-
-需要 **Go 1.26+**（`CGO_ENABLED=0`，无需 C 工具链）。
-
-```bash
-# 本机构建
-go build -trimpath -ldflags "-s -w" -o liteqsl ./cmd/liteqsl
-
-# 多平台构建 + 打包发布包
-./scripts/build-release.sh            # 版本号自动读取
-./scripts/build-release.sh 2.0.1      # 指定版本号
-```
-
-产物位于 `dist/`：`liteqsl-<os>-<arch>[.exe]` 与 `liteqsl-<version>-<os>-<arch>.tar.gz`。
-
-## 测试
-
-```bash
-go test ./...     # 单元测试 + API 集成测试
-go vet ./...
-```
-
-CI（`.github/workflows/ci.yml`）在 push / PR 时自动运行 `go vet`、`go test`，
-并做 6 个平台的交叉编译验证。
 
 ## 项目结构
 
 ```text
 LiteQSL-Web/
-├── cmd/liteqsl/          # 程序入口（含 reset-password 子命令）
+├── cmd/liteqsl/
+│   ├── main.go               # 程序入口：启动服务（-config / -version）
+│   └── reset.go              # reset-password 子命令
 ├── internal/
-│   ├── api/              # HTTP 路由与处理器
-│   ├── auth/             # 密码、会话、CSRF
-│   ├── backup/           # 备份/恢复
-│   ├── config/           # 配置加载
-│   ├── database/         # 连接、迁移、设置、用户
-│   ├── qso/              # QSO 数据访问、筛选、CSV
-│   ├── adif/             # ADIF 解析/导出
-│   ├── ratelimit/        # 登录限流
-│   ├── timeutil/         # UTC/北京时间转换
-│   └── version/          # 版本常量
-├── static/               # 前端（HTML/CSS/JS，含本地 Tailwind 与 Chart.js）
-│   └── js/vendor/        # 第三方前端库（本地化，无 CDN 依赖）
-├── deploy/               # systemd 服务单元
-├── scripts/              # 多平台构建脚本
-├── doc/                  # 版本变更记录（v1.x 历史与 v2.0.0）
-├── docs/                 # 项目文档（见下）
-├── .github/workflows/    # CI（go vet / go test / 交叉编译）
-├── data/                 # 运行时数据（数据库/密钥/备份，不提交）
-├── dist/                 # 构建产物（不提交）
-├── config.example.yaml   # 配置示例
-├── deploy.sh             # 部署脚本
+│   ├── api/                  # HTTP 路由与处理器（公开 / 管理 / 统计）
+│   ├── adif/                 # ADIF 解析与导出
+│   ├── auth/                 # 密码（bcrypt）、签名会话、CSRF
+│   ├── backup/               # 数据库备份与恢复
+│   ├── config/               # config.yaml 与环境变量加载
+│   ├── database/             # 连接、建表、迁移、设置与用户
+│   ├── qso/                  # QSO 数据访问、筛选、分页、CSV
+│   ├── ratelimit/            # 登录失败限流
+│   ├── timeutil/             # UTC / 北京时间转换
+│   └── version/              # 版本常量
+├── static/                   # 前端（需与可执行文件同级部署）
+│   ├── index.html            #   访客页面
+│   ├── admin.html            #   管理后台
+│   ├── css/tailwind.js       #   本地化 Tailwind（无 CDN 依赖）
+│   └── js/
+│       ├── common/           #   公共模块（工具、常量、格式化、分页、时钟、版本）
+│       ├── public/           #   访客页面逻辑
+│       ├── admin/            #   管理后台逻辑
+│       └── vendor/           #   本地化第三方库（Chart.js）
+├── deploy/liteqsl.service    # systemd 服务单元
+├── scripts/build-release.sh  # 多平台交叉编译与打包
+├── docs/
+│   ├── v2.0.0-changelog.md   # v2.0.0 发布说明
+│   ├── v1.0.0~v1.2.0-changelog.md  # 历史版本变更记录
+│   ├── short-term-plan.md    # v1.x 时期改进计划（历史文档）
+│   └── rebuild_reports/      # 重构文档：部署指南、兼容性对照、各阶段报告
+├── .github/workflows/ci.yml  # CI：go vet / go test / 六平台交叉编译
+├── config.example.yaml       # 配置示例
+├── deploy.sh                 # 一键部署脚本
 ├── go.mod / go.sum
+├── LICENSE
 └── README.md
 ```
+
+运行时生成、**不提交**的目录：`data/`（`qsl.db`、`.secret_key`、`backups/`）、
+`dist/`（构建产物）、`.run/`（`deploy.sh` 的 pid / 日志 / 停止标记）。
 
 > v1.x（Python）源码不在本仓库中，如有需要请从 Git 历史取得。
 
@@ -449,15 +542,15 @@ LiteQSL-Web/
 
 | 文档 | 内容 |
 |------|------|
-| [`docs/deployment.md`](docs/deployment.md) | 部署指南（配置、数据目录、systemd、Windows、反向代理、升级、备份恢复、排障、迁移） |
-| [`docs/api-compatibility.md`](docs/api-compatibility.md) | 接口兼容性对照表（前端调用 → 后端端点 → 与 Python 版比对结果） |
-| [`doc/v2.0.0-changelog.md`](doc/v2.0.0-changelog.md) | v2.0.0 发布说明 |
-| [`doc/`](doc/) | 历史版本变更记录（v1.0.0 ~ v1.2.0） |
-| [`docs/phase1-analysis.md`](docs/phase1-analysis.md) | 重构第一阶段：现有项目分析报告 |
-| [`docs/phase2-report.md`](docs/phase2-report.md) | 重构第二阶段：基础框架 |
-| [`docs/phase3-report.md`](docs/phase3-report.md) | 重构第三阶段：核心功能 |
-| [`docs/phase4-report.md`](docs/phase4-report.md) | 重构第四阶段：前端兼容 |
-| [`docs/phase5-report.md`](docs/phase5-report.md) | 重构第五阶段：部署 |
+| [`docs/rebuild_reports/deployment.md`](docs/rebuild_reports/deployment.md) | 部署指南（配置、数据目录、systemd、Windows、反向代理、升级、备份恢复、排障、迁移） |
+| [`docs/rebuild_reports/api-compatibility.md`](docs/rebuild_reports/api-compatibility.md) | 接口兼容性对照表（前端调用 → 后端端点 → 与 Python 版比对结果） |
+| [`docs/v2.0.0-changelog.md`](docs/v2.0.0-changelog.md) | v2.0.0 发布说明（Python → Go 重写） |
+| [`docs/`](docs/) | 历史版本变更记录（`v1.0.0` ~ `v1.2.0`）与 v1.x 时期计划文档 |
+| [`docs/rebuild_reports/phase1-analysis.md`](docs/rebuild_reports/phase1-analysis.md) | 重构第一阶段：现有项目分析报告 |
+| [`docs/rebuild_reports/phase2-report.md`](docs/rebuild_reports/phase2-report.md) | 重构第二阶段：基础框架 |
+| [`docs/rebuild_reports/phase3-report.md`](docs/rebuild_reports/phase3-report.md) | 重构第三阶段：核心功能 |
+| [`docs/rebuild_reports/phase4-report.md`](docs/rebuild_reports/phase4-report.md) | 重构第四阶段：前端兼容 |
+| [`docs/rebuild_reports/phase5-report.md`](docs/rebuild_reports/phase5-report.md) | 重构第五阶段：部署 |
 
 ## 注意事项
 

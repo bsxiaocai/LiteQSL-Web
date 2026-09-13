@@ -72,9 +72,9 @@ for entry in "${PLATFORMS[@]}"; do
   cp -r "$ROOT/deploy" "$pkgdir/deploy"
   cp "$ROOT/README.md" "$pkgdir/README.md"
   mkdir -p "$pkgdir/docs"
-  cp "$ROOT/docs/deployment.md" "$pkgdir/docs/" 2>/dev/null || true
-  cp "$ROOT/docs/api-compatibility.md" "$pkgdir/docs/" 2>/dev/null || true
-  cp "$ROOT/doc/v2.0.0-changelog.md" "$pkgdir/docs/" 2>/dev/null || true
+  cp "$ROOT/docs/rebuild_reports/deployment.md" "$pkgdir/docs/" 2>/dev/null || true
+  cp "$ROOT/docs/rebuild_reports/api-compatibility.md" "$pkgdir/docs/" 2>/dev/null || true
+  cp "$ROOT/docs/v2.0.0-changelog.md" "$pkgdir/docs/" 2>/dev/null || true
 
   ( cd "$DIST" && tar -czf "liteqsl-${VERSION}-${os}-${arch}.tar.gz" -C "$pkgdir" . )
   rm -rf "$pkgdir"
